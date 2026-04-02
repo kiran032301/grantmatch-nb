@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -154,7 +154,7 @@ function getScoreStyles(score: number) {
   }
 }
 
-export default function ResultsPage() {
+function ResultsContent() {
   const searchParams = useSearchParams()
   const profileId = searchParams.get('profileId')
 
@@ -163,19 +163,9 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [businessName, setBusinessName] = useState('')
-  const [contactName, setContactName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [notes, setNotes] = useState('')
-  const [leadSaving, setLeadSaving] = useState(false)
-  const [leadMessage, setLeadMessage] = useState('')
-
   useEffect(() => {
     async function saveMatches(profileIdValue: string, scoredMatches: ScoredGrant[]) {
       try {
-        console.log('Saving matches for profile:', profileIdValue)
-
         const { error: deleteError } = await supabase
           .from('profile_matches')
           .delete()
@@ -189,8 +179,6 @@ export default function ResultsPage() {
           score: grant.score,
           reasons: grant.reasons,
         }))
-
-        console.log('Rows being inserted:', rows)
 
         const { data, error } = await supabase
           .from('profile_matches')
@@ -226,7 +214,6 @@ export default function ResultsPage() {
         }
 
         setProfile(profileData)
-        setBusinessName(profileData.business_name || '')
 
         const { data: grantsData, error: grantsError } = await supabase
           .from('grants')
@@ -262,51 +249,6 @@ export default function ResultsPage() {
 
     loadMatches()
   }, [profileId])
-
- async function handleLeadSubmit(e: FormEvent<HTMLFormElement>) {
-  e.preventDefault()
-
-  try {
-    setLeadSaving(true)
-    setLeadMessage('')
-
-    const payload = {
-      profile_id: profile?.id ?? null,
-      business_name: businessName || profile?.business_name || null,
-      contact_name: contactName || null,
-      email: email || null,
-      phone: phone || null,
-      notes: notes || null,
-    }
-
-    console.log('Lead payload being inserted:', payload)
-
-    const { data, error } = await supabase
-      .from('leads')
-      .insert([payload])
-      .select()
-
-    console.log('Inserted lead row:', data)
-    console.log('Lead insert error:', error)
-
-    if (error) {
-      setLeadMessage('Could not save your details. Please try again.')
-      return
-    }
-
-    setLeadMessage('Your details have been saved successfully.')
-    setBusinessName('')
-    setContactName('')
-    setEmail('')
-    setPhone('')
-    setNotes('')
-  } catch (err) {
-    console.error('Unexpected lead save error:', err)
-    setLeadMessage('Something went wrong while saving your details.')
-  } finally {
-    setLeadSaving(false)
-  }
-}
 
   if (loading) {
     return (
@@ -443,19 +385,21 @@ export default function ResultsPage() {
           >
             Based on your quiz answers, here are the most relevant funding programs for your business.
           </p>
+
           <div
-  style={{
-    marginBottom: '1.5rem',
-    padding: '12px 16px',
-    borderRadius: 12,
-    background: 'rgba(2,195,154,0.12)',
-    border: '1px solid rgba(2,195,154,0.25)',
-    color: '#9ff7df',
-    fontSize: 14,
-  }}
->
-  ✓ Your details have been saved. These recommendations are personalized for you.
-</div>
+            style={{
+              marginTop: '1.25rem',
+              marginBottom: '1.5rem',
+              padding: '12px 16px',
+              borderRadius: 12,
+              background: 'rgba(2,195,154,0.12)',
+              border: '1px solid rgba(2,195,154,0.25)',
+              color: '#9ff7df',
+              fontSize: 14,
+            }}
+          >
+            ✓ Your details have been saved. These recommendations are personalized for you.
+          </div>
         </div>
 
         {profile && (
@@ -557,18 +501,6 @@ export default function ResultsPage() {
             </div>
           </div>
         )}
-
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: '1.5rem',
-            marginBottom: '2rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-          }}
-        >
-        </div>
 
         {matches.length === 0 ? (
           <div
@@ -866,5 +798,30 @@ export default function ResultsPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            background: '#0D1F3C',
+            color: 'white',
+            fontFamily: 'system-ui, sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
+      <ResultsContent />
+    </Suspense>
   )
 }
