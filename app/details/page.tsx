@@ -1,10 +1,10 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-export default function DetailsPage() {
+function DetailsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const profileId = searchParams.get('profileId')
@@ -47,10 +47,9 @@ export default function DetailsPage() {
         return
       }
 
-      // ✅ Redirect to results
       router.push(`/results?profileId=${profileId}`)
     } catch (err) {
-      console.error(err)
+      console.error('Details page error:', err)
       setMessage('Something went wrong.')
     } finally {
       setLoading(false)
@@ -182,7 +181,32 @@ export default function DetailsPage() {
   )
 }
 
-const inputStyle = {
+export default function DetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            background: '#0D1F3C',
+            color: 'white',
+            fontFamily: 'system-ui, sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
+      <DetailsContent />
+    </Suspense>
+  )
+}
+
+const inputStyle: React.CSSProperties = {
   padding: '14px 16px',
   borderRadius: 12,
   border: '1px solid rgba(255,255,255,0.12)',
@@ -191,4 +215,5 @@ const inputStyle = {
   fontSize: 15,
   outline: 'none',
   width: '100%',
+  boxSizing: 'border-box',
 }
