@@ -128,58 +128,12 @@ function StatCard({
   subtitle: string
 }) {
   return (
-    <div
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 18,
-        padding: '1.25rem',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'rgba(255,255,255,0.45)',
-          marginBottom: 10,
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          fontSize: 34,
-          fontWeight: 800,
-          lineHeight: 1,
-          marginBottom: 10,
-          color: 'white',
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          fontSize: 14,
-          color: 'rgba(255,255,255,0.55)',
-          lineHeight: 1.5,
-        }}
-      >
-        {subtitle}
-      </div>
+    <div className="statCard">
+      <div className="statTitle">{title}</div>
+      <div className="statValue">{value}</div>
+      <div className="statSubtitle">{subtitle}</div>
     </div>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  borderRadius: 12,
-  border: '1px solid rgba(255,255,255,0.12)',
-  background: 'rgba(255,255,255,0.04)',
-  color: 'white',
-  fontSize: 14,
-  outline: 'none',
 }
 
 export default function AdminPage() {
@@ -202,25 +156,10 @@ export default function AdminPage() {
     async function loadAdminData() {
       try {
         const [profilesRes, matchesRes, grantsRes, leadsRes] = await Promise.all([
-          supabase
-            .from('user_profiles')
-            .select('*')
-            .order('created_at', { ascending: false }),
-
-          supabase
-            .from('profile_matches')
-            .select('*')
-            .order('created_at', { ascending: false }),
-
-          supabase
-            .from('grants')
-            .select('id, name, organization, type, intake_status')
-            .order('name', { ascending: true }),
-
-          supabase
-            .from('leads')
-            .select('*')
-            .order('created_at', { ascending: false }),
+          supabase.from('user_profiles').select('*').order('created_at', { ascending: false }),
+          supabase.from('profile_matches').select('*').order('created_at', { ascending: false }),
+          supabase.from('grants').select('id, name, organization, type, intake_status').order('name', { ascending: true }),
+          supabase.from('leads').select('*').order('created_at', { ascending: false }),
         ])
 
         if (profilesRes.error) {
@@ -409,196 +348,58 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0D1F3C',
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: '2rem 1.5rem',
-        }}
-      >
-        <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center', paddingTop: '4rem' }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              border: '3px solid rgba(255,255,255,0.12)',
-              borderTop: '3px solid #02C39A',
-              margin: '0 auto 1.5rem',
-              animation: 'spin 1s linear infinite',
-            }}
-          />
-          <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: '0.75rem' }}>
-            Loading admin insights...
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>
+      <div className="page">
+        <div className="loadingWrap">
+          <div className="spinner" />
+          <h1 className="loadingTitle">Loading admin insights...</h1>
+          <p className="loadingText">
             Please wait while we collect leads, matches, and grant activity.
           </p>
-          <style>{`
-            @keyframes spin {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
         </div>
+        <style>{styles}</style>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0D1F3C',
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: '2rem 1.5rem',
-        }}
-      >
-        <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '4rem' }}>
-          <div
-            style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.35)',
-              borderRadius: 16,
-              padding: '1.5rem',
-            }}
-          >
-            <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: '0.75rem' }}>
-              Something went wrong
-            </h1>
-            <p style={{ color: '#fecaca', margin: 0 }}>{error}</p>
+      <div className="page">
+        <div className="shell">
+          <div className="brandTop">GrantMatch NB</div>
+          <div className="errorCard">
+            <h1 className="errorTitle">Something went wrong</h1>
+            <p className="errorText">{error}</p>
           </div>
         </div>
+        <style>{styles}</style>
       </div>
     )
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0D1F3C',
-        color: 'white',
-        fontFamily: 'system-ui, sans-serif',
-        padding: '2rem 1.5rem 4rem',
-      }}
-    >
-      <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-        <span
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#02C39A',
-          }}
-        >
-          GrantMatch NB
-        </span>
-      </div>
+    <div className="page">
+      <div className="shell">
+        <div className="brandTop">GrantMatch NB</div>
 
-      <div style={{ maxWidth: 1250, margin: '0 auto' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 14px',
-              borderRadius: 999,
-              background: 'rgba(2,195,154,0.12)',
-              border: '1px solid rgba(2,195,154,0.25)',
-              color: '#02C39A',
-              fontSize: 13,
-              fontWeight: 600,
-              marginBottom: '1rem',
-            }}
-          >
-            Admin Dashboard
-          </div>
-
-          <h1
-            style={{
-              fontSize: 40,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              marginBottom: '0.85rem',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Leads & Match Tables
-          </h1>
-
-          <p
-            style={{
-              maxWidth: 820,
-              fontSize: 17,
-              lineHeight: 1.6,
-              color: 'rgba(255,255,255,0.6)',
-              margin: 0,
-            }}
-          >
-            Use the summary cards for overview, then manage growing data in a table format with filters and CSV downloads.
+        <div className="heroSection">
+          <div className="heroBadge">Admin Dashboard</div>
+          <h1 className="heroTitle">Leads & Match Tables</h1>
+          <p className="heroText">
+            Use the summary cards for overview, then manage growing data in a clean responsive dashboard with filters and CSV downloads.
           </p>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            flexWrap: 'wrap',
-            marginBottom: '2rem',
-          }}
-        >
-          <Link
-            href="/"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0.9rem 1.2rem',
-              borderRadius: 14,
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: 15,
-              background: 'linear-gradient(90deg, #028090, #02C39A)',
-              color: 'white',
-              boxShadow: '0 8px 20px rgba(2,195,154,0.18)',
-            }}
-          >
+        <div className="heroActions">
+          <Link href="/" className="primaryBtn">
             Back to Home
           </Link>
 
-          <Link
-            href="/quiz"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0.9rem 1.2rem',
-              borderRadius: 14,
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: 15,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'white',
-            }}
-          >
+          <Link href="/quiz" className="secondaryBtn">
             Run New Quiz
           </Link>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 14,
-            marginBottom: '2rem',
-          }}
-        >
+        <div className="statsGrid">
           <StatCard
             title="Total Profiles"
             value={totalProfiles}
@@ -622,119 +423,48 @@ export default function AdminPage() {
         </div>
 
         {topGrant && (
-          <div
-            style={{
-              marginBottom: '2rem',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '1.25rem',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
+          <div className="panel">
+            <div className="topGrantWrap">
               <div>
-                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>
-                  Most Matched Grant
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: 'white', marginBottom: 6 }}>
-                  {topGrant.name}
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
-                  {topGrant.organization || 'Organization not specified'}
-                </div>
+                <div className="smallMuted">Most Matched Grant</div>
+                <div className="topGrantTitle">{topGrant.name}</div>
+                <div className="topGrantOrg">{topGrant.organization || 'Organization not specified'}</div>
               </div>
 
-              <div
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 999,
-                  background: 'rgba(2,195,154,0.12)',
-                  border: '1px solid rgba(2,195,154,0.25)',
-                  color: '#02C39A',
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}
-              >
+              <div className="pillBadge">
                 Matched {topGrant.matchCount} time(s)
               </div>
             </div>
           </div>
         )}
 
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: '1.25rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-            marginBottom: '1.5rem',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 12,
-              alignItems: 'flex-start',
-              flexWrap: 'wrap',
-              marginBottom: '1rem',
-            }}
-          >
+        <div className="panel">
+          <div className="panelHeader">
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Leads Table</h2>
-              <p
-                style={{
-                  marginTop: 6,
-                  marginBottom: 0,
-                  color: 'rgba(255,255,255,0.55)',
-                  fontSize: 14,
-                }}
-              >
+              <h2 className="panelTitle">Leads Table</h2>
+              <p className="panelSubtitle">
                 Filter and export lead records by date range or search text.
               </p>
             </div>
 
-            <div
-              style={{
-                color: 'rgba(255,255,255,0.65)',
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
+            <div className="panelCount">
               Showing {filteredLeads.length} of {leads.length} lead(s)
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 12,
-              marginBottom: '1rem',
-            }}
-          >
+          <div className="filterGrid">
             <input
               type="date"
               value={leadFromDate}
               onChange={(e) => setLeadFromDate(e.target.value)}
-              style={inputStyle}
+              className="input"
             />
 
             <input
               type="date"
               value={leadToDate}
               onChange={(e) => setLeadToDate(e.target.value)}
-              style={inputStyle}
+              className="input"
             />
 
             <input
@@ -742,59 +472,29 @@ export default function AdminPage() {
               placeholder="Search leads..."
               value={leadSearch}
               onChange={(e) => setLeadSearch(e.target.value)}
-              style={{ ...inputStyle, minWidth: 220 }}
+              className="input"
             />
 
             <button
               onClick={handleExportLeadsCsv}
               disabled={!filteredLeads.length}
-              style={{
-                border: 'none',
-                borderRadius: 12,
-                padding: '12px 14px',
-                background: filteredLeads.length
-                  ? 'linear-gradient(90deg, #028090, #02C39A)'
-                  : 'rgba(255,255,255,0.08)',
-                color: 'white',
-                fontWeight: 700,
-                cursor: filteredLeads.length ? 'pointer' : 'not-allowed',
-              }}
+              className="primaryBtn buttonReset"
             >
               Download CSV
             </button>
 
             <button
               onClick={clearLeadFilters}
-              style={{
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 12,
-                padding: '12px 14px',
-                background: 'rgba(255,255,255,0.04)',
-                color: 'white',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
+              className="secondaryBtn buttonReset"
             >
               Clear Filters
             </button>
           </div>
 
-          <div
-            style={{
-              overflowX: 'auto',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 16,
-            }}
-          >
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                minWidth: 1200,
-              }}
-            >
+          <div className="tableWrap">
+            <table className="dataTable">
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <tr>
                   {[
                     'Date',
                     'Business Name',
@@ -807,21 +507,7 @@ export default function AdminPage() {
                     'Notes',
                     'Profile ID',
                   ].map((header) => (
-                    <th
-                      key={header}
-                      style={{
-                        textAlign: 'left',
-                        padding: '14px 12px',
-                        fontSize: 12,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: 'rgba(255,255,255,0.5)',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {header}
-                    </th>
+                    <th key={header}>{header}</th>
                   ))}
                 </tr>
               </thead>
@@ -829,41 +515,23 @@ export default function AdminPage() {
               <tbody>
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={10}
-                      style={{
-                        padding: '18px 14px',
-                        color: 'rgba(255,255,255,0.6)',
-                      }}
-                    >
+                    <td colSpan={10} className="emptyCell">
                       No leads found for the current filters.
                     </td>
                   </tr>
                 ) : (
                   filteredLeads.map((lead, index) => (
-                    <tr
-                      key={lead.id}
-                      style={{
-                        background:
-                          index % 2 === 0
-                            ? 'rgba(255,255,255,0.02)'
-                            : 'rgba(255,255,255,0.035)',
-                      }}
-                    >
-                      <td style={cellStyle}>{formatDate(lead.created_at)}</td>
-                      <td style={{ ...cellStyle, color: 'white', fontWeight: 600 }}>
-                        {lead.business_name || '-'}
-                      </td>
-                      <td style={cellStyle}>{lead.contact_name || '-'}</td>
-                      <td style={{ ...cellStyle, color: '#93c5fd' }}>{lead.email || '-'}</td>
-                      <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>{lead.phone || '-'}</td>
-                      <td style={cellStyle}>{lead.profile?.industry || '-'}</td>
-                      <td style={cellStyle}>{lead.profile?.stage || '-'}</td>
-                      <td style={cellStyle}>{lead.profile?.goal || '-'}</td>
-                      <td style={{ ...cellStyle, minWidth: 220 }}>{lead.notes || '-'}</td>
-                      <td style={{ ...cellStyle, fontSize: 12, minWidth: 220, wordBreak: 'break-all' }}>
-                        {lead.profile_id || '-'}
-                      </td>
+                    <tr key={lead.id} className={index % 2 === 0 ? 'rowEven' : 'rowOdd'}>
+                      <td>{formatDate(lead.created_at)}</td>
+                      <td className="strongCell">{lead.business_name || '-'}</td>
+                      <td>{lead.contact_name || '-'}</td>
+                      <td className="linkCell">{lead.email || '-'}</td>
+                      <td>{lead.phone || '-'}</td>
+                      <td>{lead.profile?.industry || '-'}</td>
+                      <td>{lead.profile?.stage || '-'}</td>
+                      <td>{lead.profile?.goal || '-'}</td>
+                      <td className="wideCell">{lead.notes || '-'}</td>
+                      <td className="idCell">{lead.profile_id || '-'}</td>
                     </tr>
                   ))
                 )}
@@ -872,70 +540,33 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: '1.25rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 12,
-              alignItems: 'flex-start',
-              flexWrap: 'wrap',
-              marginBottom: '1rem',
-            }}
-          >
+        <div className="panel">
+          <div className="panelHeader">
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Matches Table</h2>
-              <p
-                style={{
-                  marginTop: 6,
-                  marginBottom: 0,
-                  color: 'rgba(255,255,255,0.55)',
-                  fontSize: 14,
-                }}
-              >
+              <h2 className="panelTitle">Matches Table</h2>
+              <p className="panelSubtitle">
                 Track matched grants in a row-based format and export filtered match records.
               </p>
             </div>
 
-            <div
-              style={{
-                color: 'rgba(255,255,255,0.65)',
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
+            <div className="panelCount">
               Showing {filteredMatches.length} of {matches.length} match(es)
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 12,
-              marginBottom: '1rem',
-            }}
-          >
+          <div className="filterGrid">
             <input
               type="date"
               value={matchFromDate}
               onChange={(e) => setMatchFromDate(e.target.value)}
-              style={inputStyle}
+              className="input"
             />
 
             <input
               type="date"
               value={matchToDate}
               onChange={(e) => setMatchToDate(e.target.value)}
-              style={inputStyle}
+              className="input"
             />
 
             <input
@@ -943,59 +574,29 @@ export default function AdminPage() {
               placeholder="Search matches..."
               value={matchSearch}
               onChange={(e) => setMatchSearch(e.target.value)}
-              style={{ ...inputStyle, minWidth: 220 }}
+              className="input"
             />
 
             <button
               onClick={handleExportMatchesCsv}
               disabled={!filteredMatches.length}
-              style={{
-                border: 'none',
-                borderRadius: 12,
-                padding: '12px 14px',
-                background: filteredMatches.length
-                  ? 'linear-gradient(90deg, #028090, #02C39A)'
-                  : 'rgba(255,255,255,0.08)',
-                color: 'white',
-                fontWeight: 700,
-                cursor: filteredMatches.length ? 'pointer' : 'not-allowed',
-              }}
+              className="primaryBtn buttonReset"
             >
               Download CSV
             </button>
 
             <button
               onClick={clearMatchFilters}
-              style={{
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 12,
-                padding: '12px 14px',
-                background: 'rgba(255,255,255,0.04)',
-                color: 'white',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
+              className="secondaryBtn buttonReset"
             >
               Clear Filters
             </button>
           </div>
 
-          <div
-            style={{
-              overflowX: 'auto',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 16,
-            }}
-          >
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                minWidth: 1250,
-              }}
-            >
+          <div className="tableWrap">
+            <table className="dataTable">
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <tr>
                   {[
                     'Date',
                     'Grant Name',
@@ -1008,21 +609,7 @@ export default function AdminPage() {
                     'Profile ID',
                     'Grant ID',
                   ].map((header) => (
-                    <th
-                      key={header}
-                      style={{
-                        textAlign: 'left',
-                        padding: '14px 12px',
-                        fontSize: 12,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: 'rgba(255,255,255,0.5)',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {header}
-                    </th>
+                    <th key={header}>{header}</th>
                   ))}
                 </tr>
               </thead>
@@ -1030,66 +617,39 @@ export default function AdminPage() {
               <tbody>
                 {filteredMatches.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={10}
-                      style={{
-                        padding: '18px 14px',
-                        color: 'rgba(255,255,255,0.6)',
-                      }}
-                    >
+                    <td colSpan={10} className="emptyCell">
                       No matches found for the current filters.
                     </td>
                   </tr>
                 ) : (
                   filteredMatches.map((match, index) => (
-                    <tr
-                      key={match.id}
-                      style={{
-                        background:
-                          index % 2 === 0
-                            ? 'rgba(255,255,255,0.02)'
-                            : 'rgba(255,255,255,0.035)',
-                      }}
-                    >
-                      <td style={cellStyle}>{formatDate(match.created_at)}</td>
-                      <td style={{ ...cellStyle, color: 'white', fontWeight: 600 }}>
-                        {match.grant?.name || '-'}
-                      </td>
-                      <td style={cellStyle}>{match.grant?.organization || '-'}</td>
-                      <td style={cellStyle}>
+                    <tr key={match.id} className={index % 2 === 0 ? 'rowEven' : 'rowOdd'}>
+                      <td>{formatDate(match.created_at)}</td>
+                      <td className="strongCell">{match.grant?.name || '-'}</td>
+                      <td>{match.grant?.organization || '-'}</td>
+                      <td>
                         <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '6px 10px',
-                            borderRadius: 999,
-                            background:
-                              match.score >= 70
-                                ? 'linear-gradient(90deg, #02C39A, #028090)'
-                                : match.score >= 40
-                                ? 'linear-gradient(90deg, #2563eb, #1d4ed8)'
-                                : 'rgba(255,255,255,0.12)',
-                            color: 'white',
-                            fontSize: 12,
-                            fontWeight: 700,
-                          }}
+                          className={
+                            match.score >= 70
+                              ? 'scoreBadge strong'
+                              : match.score >= 40
+                              ? 'scoreBadge good'
+                              : 'scoreBadge light'
+                          }
                         >
                           {match.score}
                         </span>
                       </td>
-                      <td style={cellStyle}>{match.profile?.industry || '-'}</td>
-                      <td style={cellStyle}>{match.profile?.stage || '-'}</td>
-                      <td style={cellStyle}>{match.profile?.goal || '-'}</td>
-                      <td style={{ ...cellStyle, minWidth: 260 }}>
+                      <td>{match.profile?.industry || '-'}</td>
+                      <td>{match.profile?.stage || '-'}</td>
+                      <td>{match.profile?.goal || '-'}</td>
+                      <td className="wideCell">
                         {match.reasons && match.reasons.length > 0
                           ? match.reasons.join(' • ')
                           : '-'}
                       </td>
-                      <td style={{ ...cellStyle, fontSize: 12, minWidth: 220, wordBreak: 'break-all' }}>
-                        {match.profile_id || '-'}
-                      </td>
-                      <td style={{ ...cellStyle, fontSize: 12, minWidth: 220, wordBreak: 'break-all' }}>
-                        {match.grant_id || '-'}
-                      </td>
+                      <td className="idCell">{match.profile_id || '-'}</td>
+                      <td className="idCell">{match.grant_id || '-'}</td>
                     </tr>
                   ))
                 )}
@@ -1098,13 +658,419 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      <style>{styles}</style>
     </div>
   )
 }
 
-const cellStyle: React.CSSProperties = {
-  padding: '14px 12px',
-  borderBottom: '1px solid rgba(255,255,255,0.06)',
-  color: 'rgba(255,255,255,0.82)',
-  verticalAlign: 'top',
-}
+const styles = `
+  .page {
+    min-height: 100vh;
+    background: #0D1F3C;
+    color: white;
+    font-family: system-ui, sans-serif;
+    padding: 24px 14px 36px;
+  }
+
+  .shell {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  .brandTop {
+    text-align: center;
+    margin-bottom: 28px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #02C39A;
+  }
+
+  .heroSection {
+    margin-bottom: 20px;
+  }
+
+  .heroBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #02C39A;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  .heroTitle {
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .heroText {
+    max-width: 820px;
+    font-size: 16px;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.62);
+    margin: 0;
+  }
+
+  .heroActions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+
+  .primaryBtn,
+  .secondaryBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 13px 16px;
+    border-radius: 14px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 15px;
+    min-height: 46px;
+  }
+
+  .primaryBtn {
+    background: linear-gradient(90deg, #028090, #02C39A);
+    color: white;
+    border: none;
+    box-shadow: 0 8px 20px rgba(2,195,154,0.18);
+  }
+
+  .secondaryBtn {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: white;
+  }
+
+  .buttonReset {
+    cursor: pointer;
+  }
+
+  .buttonReset:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .statsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .statCard {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  }
+
+  .statTitle {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 10px;
+  }
+
+  .statValue {
+    font-size: clamp(28px, 4vw, 34px);
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 10px;
+    color: white;
+  }
+
+  .statSubtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.5;
+  }
+
+  .panel {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    margin-bottom: 18px;
+  }
+
+  .topGrantWrap {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .smallMuted {
+    font-size: 14px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+  }
+
+  .topGrantTitle {
+    font-size: clamp(22px, 4vw, 28px);
+    font-weight: 800;
+    color: white;
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+
+  .topGrantOrg {
+    color: rgba(255,255,255,0.65);
+    font-size: 15px;
+  }
+
+  .pillBadge {
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #02C39A;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .panelHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .panelTitle {
+    font-size: clamp(20px, 3vw, 24px);
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .panelSubtitle {
+    margin-top: 6px;
+    margin-bottom: 0;
+    color: rgba(255,255,255,0.55);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .panelCount {
+    color: rgba(255,255,255,0.65);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .filterGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .input {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: white;
+    font-size: 14px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .tableWrap {
+    overflow-x: auto;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+  }
+
+  .dataTable {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+  }
+
+  .dataTable thead tr {
+    background: rgba(255,255,255,0.05);
+  }
+
+  .dataTable th {
+    text-align: left;
+    padding: 13px 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.5);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    white-space: nowrap;
+  }
+
+  .dataTable td {
+    padding: 13px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.82);
+    vertical-align: top;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .rowEven {
+    background: rgba(255,255,255,0.02);
+  }
+
+  .rowOdd {
+    background: rgba(255,255,255,0.035);
+  }
+
+  .strongCell {
+    color: white !important;
+    font-weight: 600;
+  }
+
+  .linkCell {
+    color: #93c5fd !important;
+  }
+
+  .wideCell {
+    min-width: 220px;
+  }
+
+  .idCell {
+    min-width: 220px;
+    font-size: 12px !important;
+    word-break: break-all;
+  }
+
+  .emptyCell {
+    padding: 18px 14px !important;
+    color: rgba(255,255,255,0.6) !important;
+  }
+
+  .scoreBadge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .scoreBadge.strong {
+    background: linear-gradient(90deg, #02C39A, #028090);
+  }
+
+  .scoreBadge.good {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  }
+
+  .scoreBadge.light {
+    background: rgba(255,255,255,0.12);
+  }
+
+  .loadingWrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    text-align: center;
+    padding-top: 70px;
+  }
+
+  .spinner {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top: 3px solid #02C39A;
+    margin: 0 auto 24px;
+    animation: spin 1s linear infinite;
+  }
+
+  .loadingTitle {
+    font-size: clamp(26px, 4vw, 32px);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .loadingText {
+    color: rgba(255,255,255,0.55);
+    font-size: 15px;
+    margin: 0;
+  }
+
+   .errorCard {
+    max-width: 760px;
+    margin: 60px auto 0;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 16px;
+    padding: 24px 20px;
+  }
+
+  .errorTitle {
+    font-size: clamp(24px, 4vw, 28px);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .errorText {
+    color: #fecaca;
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 768px) {
+    .page {
+      padding: 18px 12px 28px;
+    }
+
+    .brandTop {
+      font-size: 18px;
+      margin-bottom: 22px;
+    }
+
+    .panel,
+    .statCard {
+      padding: 16px;
+      border-radius: 16px;
+    }
+
+    .heroActions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .primaryBtn,
+    .secondaryBtn {
+      width: 100%;
+    }
+
+    .dataTable th,
+    .dataTable td {
+      padding: 10px 8px;
+      font-size: 13px;
+    }
+
+    .panelCount {
+      width: 100%;
+    }
+  }
+`

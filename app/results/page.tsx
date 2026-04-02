@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -133,25 +133,63 @@ function scoreGrant(profile: Profile, grant: Grant): ScoredGrant {
   }
 }
 
-function getScoreStyles(score: number) {
+function getScoreMeta(score: number) {
   if (score >= 70) {
     return {
-      bg: 'linear-gradient(90deg, #02C39A, #028090)',
       label: 'Strong Match',
+      className: 'strong',
     }
   }
 
   if (score >= 40) {
     return {
-      bg: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
       label: 'Good Match',
+      className: 'good',
     }
   }
 
   return {
-    bg: 'rgba(255,255,255,0.14)',
     label: 'Possible Match',
+    className: 'possible',
   }
+}
+
+function formatAmount(amount: number | null) {
+  if (!amount) return 'Not specified'
+  return `$${amount.toLocaleString()}`
+}
+
+function LoadingState() {
+  return (
+    <div className="page">
+      <div className="loadingWrap">
+        <div className="spinner" />
+        <h1 className="loadingTitle">Finding your best grant matches...</h1>
+        <p className="loadingText">
+          We are reviewing funding programs based on your answers.
+        </p>
+      </div>
+
+      <style>{baseStyles}</style>
+    </div>
+  )
+}
+
+function ErrorState({ error }: { error: string }) {
+  return (
+    <div className="page">
+      <div className="shell">
+        <div className="brandTop">GrantMatch NB</div>
+
+        <div className="errorCard">
+          <h1 className="errorTitle">Something went wrong</h1>
+          <p className="errorText">{error}</p>
+        </div>
+      </div>
+
+      <style>{baseStyles}</style>
+    </div>
+  )
 }
 
 function ResultsContent() {
@@ -204,11 +242,21 @@ function ResultsContent() {
           .from('user_profiles')
           .select('*')
           .eq('id', profileId)
-          .single()
+          .maybeSingle()
 
-        if (profileError || !profileData) {
+        console.log('profileId from URL:', profileId)
+        console.log('profileData:', profileData)
+        console.log('profileError:', profileError)
+
+        if (profileError) {
           console.error('Profile fetch error:', profileError)
-          setError('Could not load your profile.')
+          setError(`Could not load your profile: ${profileError.message}`)
+          setLoading(false)
+          return
+        }
+
+        if (!profileData) {
+          setError('Could not load your profile. No matching profile was found.')
           setLoading(false)
           return
         }
@@ -220,9 +268,12 @@ function ResultsContent() {
           .select('*')
           .eq('intake_status', 'open')
 
+        console.log('grantsData:', grantsData)
+        console.log('grantsError:', grantsError)
+
         if (grantsError) {
           console.error('Grant fetch error:', grantsError)
-          setError('Could not load grants.')
+          setError(`Could not load grants: ${grantsError.message}`)
           setLoading(false)
           return
         }
@@ -251,214 +302,43 @@ function ResultsContent() {
   }, [profileId])
 
   if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0D1F3C',
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: '2rem 1.5rem',
-        }}
-      >
-        <div style={{ maxWidth: 980, margin: '0 auto', textAlign: 'center', paddingTop: '4rem' }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              border: '3px solid rgba(255,255,255,0.12)',
-              borderTop: '3px solid #02C39A',
-              margin: '0 auto 1.5rem',
-              animation: 'spin 1s linear infinite',
-            }}
-          />
-          <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: '0.75rem' }}>
-            Finding your best grant matches...
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>
-            We are reviewing funding programs based on your answers.
-          </p>
-          <style>{`
-            @keyframes spin {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
-        </div>
-      </div>
-    )
+    return <LoadingState />
   }
 
   if (error) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0D1F3C',
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: '2rem 1.5rem',
-        }}
-      >
-        <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '4rem' }}>
-          <div
-            style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.35)',
-              borderRadius: 16,
-              padding: '1.5rem',
-            }}
-          >
-            <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: '0.75rem' }}>
-              Something went wrong
-            </h1>
-            <p style={{ color: '#fecaca', margin: 0 }}>{error}</p>
-          </div>
-        </div>
-      </div>
-    )
+    return <ErrorState error={error} />
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0D1F3C',
-        color: 'white',
-        fontFamily: 'system-ui, sans-serif',
-        padding: '2rem 1.5rem 4rem',
-      }}
-    >
-      <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-        <span
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#02C39A',
-          }}
-        >
-          GrantMatch NB
-        </span>
-      </div>
+    <div className="page">
+      <div className="shell">
+        <div className="brandTop">GrantMatch NB</div>
 
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 14px',
-              borderRadius: 999,
-              background: 'rgba(2,195,154,0.12)',
-              border: '1px solid rgba(2,195,154,0.25)',
-              color: '#02C39A',
-              fontSize: 13,
-              fontWeight: 600,
-              marginBottom: '1rem',
-            }}
-          >
-            ✓ Results Ready
-          </div>
-
-          <h1
-            style={{
-              fontSize: 40,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              marginBottom: '0.85rem',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Your Grant Matches
-          </h1>
-
-          <p
-            style={{
-              maxWidth: 720,
-              fontSize: 17,
-              lineHeight: 1.6,
-              color: 'rgba(255,255,255,0.6)',
-              margin: 0,
-            }}
-          >
+        <div className="heroBlock">
+          <div className="heroBadge">✓ Results Ready</div>
+          <h1 className="heroTitle">Your Grant Matches</h1>
+          <p className="heroText">
             Based on your quiz answers, here are the most relevant funding programs for your business.
           </p>
-
-          <div
-            style={{
-              marginTop: '1.25rem',
-              marginBottom: '1.5rem',
-              padding: '12px 16px',
-              borderRadius: 12,
-              background: 'rgba(2,195,154,0.12)',
-              border: '1px solid rgba(2,195,154,0.25)',
-              color: '#9ff7df',
-              fontSize: 14,
-            }}
-          >
+          <div className="heroNotice">
             ✓ Your details have been saved. These recommendations are personalized for you.
           </div>
         </div>
 
         {profile && (
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '1.5rem',
-              marginBottom: '2rem',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 12,
-                marginBottom: '1rem',
-              }}
-            >
+          <div className="panel">
+            <div className="panelHeader">
               <div>
-                <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Your profile</h2>
-                <p
-                  style={{
-                    marginTop: 6,
-                    marginBottom: 0,
-                    color: 'rgba(255,255,255,0.5)',
-                    fontSize: 14,
-                  }}
-                >
+                <h2 className="panelTitle">Your profile</h2>
+                <p className="panelSubtitle">
                   This is the information used to calculate your funding matches.
                 </p>
               </div>
 
-              <div
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 999,
-                  background: 'rgba(2,128,144,0.18)',
-                  border: '1px solid rgba(2,128,144,0.35)',
-                  color: '#67e8f9',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Personalized Match Profile
-              </div>
+              <div className="profileBadge">Personalized Match Profile</div>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: 14,
-              }}
-            >
+            <div className="profileGrid">
               {[
                 ['Industry', profile.industry || '-'],
                 ['Stage', profile.stage || '-'],
@@ -466,36 +346,9 @@ function ResultsContent() {
                 ['Does R&D', profile.does_rd ? 'Yes' : 'No'],
                 ['Goal', profile.goal || '-'],
               ].map(([label, value]) => (
-                <div
-                  key={label}
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 14,
-                    padding: '1rem',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      color: 'rgba(255,255,255,0.4)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    {label}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 600,
-                      lineHeight: 1.4,
-                      color: 'white',
-                    }}
-                  >
-                    {value}
-                  </div>
+                <div key={String(label)} className="profileItem">
+                  <div className="profileLabel">{label}</div>
+                  <div className="profileValue">{value}</div>
                 </div>
               ))}
             </div>
@@ -503,267 +356,70 @@ function ResultsContent() {
         )}
 
         {matches.length === 0 ? (
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '1.5rem',
-            }}
-          >
-            No grants are available in the database yet.
+          <div className="panel">
+            <p className="emptyText">No grants are available in the database yet.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <div className="resultsList">
             {matches.map((grant, index) => {
-              const scoreStyle = getScoreStyles(grant.score)
+              const scoreMeta = getScoreMeta(grant.score)
 
               return (
-                <div
-                  key={grant.id}
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 20,
-                    padding: '1.5rem',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      gap: '1rem',
-                      flexWrap: 'wrap',
-                      marginBottom: '1rem',
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 240 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          flexWrap: 'wrap',
-                          marginBottom: 10,
-                        }}
-                      >
-                        {index === 0 && (
-                          <span
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: 999,
-                              background: 'rgba(2,195,154,0.12)',
-                              border: '1px solid rgba(2,195,154,0.25)',
-                              color: '#02C39A',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              letterSpacing: '0.03em',
-                            }}
-                          >
-                            TOP MATCH
-                          </span>
-                        )}
-
-                        <span
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: 999,
-                            background: 'rgba(255,255,255,0.08)',
-                            color: 'rgba(255,255,255,0.7)',
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {grant.type || 'Program'}
-                        </span>
+                <div key={grant.id} className="grantCard">
+                  <div className="grantTop">
+                    <div className="grantTopLeft">
+                      <div className="grantBadges">
+                        {index === 0 && <span className="topMatchBadge">TOP MATCH</span>}
+                        <span className="typeBadge">{grant.type || 'Program'}</span>
                       </div>
 
-                      <h2
-                        style={{
-                          fontSize: 30,
-                          fontWeight: 800,
-                          lineHeight: 1.15,
-                          marginBottom: '0.55rem',
-                          letterSpacing: '-0.02em',
-                        }}
-                      >
-                        {grant.name}
-                      </h2>
-
-                      <p
-                        style={{
-                          fontSize: 16,
-                          color: 'rgba(255,255,255,0.55)',
-                          marginBottom: 0,
-                        }}
-                      >
-                        {grant.organization || 'Organization not specified'}
-                      </p>
+                      <h2 className="grantTitle">{grant.name}</h2>
+                      <p className="grantOrg">{grant.organization || 'Organization not specified'}</p>
                     </div>
 
-                    <div
-                      style={{
-                        minWidth: 140,
-                        textAlign: 'center',
-                        padding: '0.8rem 1rem',
-                        borderRadius: 18,
-                        background: scoreStyle.bg,
-                        color: 'white',
-                        fontWeight: 700,
-                      }}
-                    >
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 4 }}>
-                        {scoreStyle.label}
-                      </div>
-                      <div style={{ fontSize: 22 }}>{grant.score}</div>
+                    <div className={`scoreCard ${scoreMeta.className}`}>
+                      <div className="scoreLabel">{scoreMeta.label}</div>
+                      <div className="scoreValue">{grant.score}</div>
                     </div>
                   </div>
 
-                  <p
-                    style={{
-                      fontSize: 16,
-                      lineHeight: 1.7,
-                      color: 'rgba(255,255,255,0.82)',
-                      marginBottom: '1.25rem',
-                    }}
-                  >
+                  <p className="grantDescription">
                     {grant.description || 'No description available.'}
                   </p>
 
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                      gap: 12,
-                      marginBottom: '1.25rem',
-                    }}
-                  >
-                    <div
-                      style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 14,
-                        padding: '1rem',
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
-                        Maximum Amount
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>
-                        {grant.amount_max ? `$${grant.amount_max.toLocaleString()}` : 'Not specified'}
-                      </div>
+                  <div className="infoGrid">
+                    <div className="infoItem">
+                      <div className="infoLabel">Maximum Amount</div>
+                      <div className="infoValue">{formatAmount(grant.amount_max)}</div>
                     </div>
 
-                    <div
-                      style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 14,
-                        padding: '1rem',
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
-                        Repayable
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>
-                        {grant.repayable ? 'Yes' : 'No'}
-                      </div>
+                    <div className="infoItem">
+                      <div className="infoLabel">Repayable</div>
+                      <div className="infoValue">{grant.repayable ? 'Yes' : 'No'}</div>
                     </div>
 
-                    <div
-                      style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 14,
-                        padding: '1rem',
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>
-                        Status
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>
-                        {grant.intake_status || 'Unknown'}
-                      </div>
+                    <div className="infoItem">
+                      <div className="infoLabel">Status</div>
+                      <div className="infoValue">{grant.intake_status || 'Unknown'}</div>
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 16,
-                      padding: '1rem',
-                      marginBottom: '1.25rem',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 700,
-                        marginBottom: '0.7rem',
-                      }}
-                    >
-                      Eligibility
-                    </div>
-                    <div
-                      style={{
-                        color: 'rgba(255,255,255,0.72)',
-                        lineHeight: 1.6,
-                        fontSize: 15,
-                      }}
-                    >
-                      {grant.eligibility || 'Not specified'}
-                    </div>
+                  <div className="sectionCard">
+                    <div className="sectionTitle">Eligibility</div>
+                    <div className="sectionBody">{grant.eligibility || 'Not specified'}</div>
                   </div>
 
                   {grant.reasons.length > 0 ? (
-                    <div
-                      style={{
-                        background: 'rgba(2,195,154,0.08)',
-                        border: '1px solid rgba(2,195,154,0.2)',
-                        borderRadius: 16,
-                        padding: '1rem',
-                        marginBottom: '1.25rem',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          marginBottom: '0.7rem',
-                          color: '#9ff7df',
-                        }}
-                      >
-                        Why this matches
-                      </div>
-                      <ul
-                        style={{
-                          paddingLeft: '1.2rem',
-                          color: 'rgba(255,255,255,0.82)',
-                          margin: 0,
-                        }}
-                      >
+                    <div className="matchWhyCard">
+                      <div className="sectionTitle matchWhyTitle">Why this matches</div>
+                      <ul className="reasonsList">
                         {grant.reasons.map((reason, index2) => (
-                          <li key={index2} style={{ marginBottom: 6, lineHeight: 1.5 }}>
-                            {reason}
-                          </li>
+                          <li key={index2}>{reason}</li>
                         ))}
                       </ul>
                     </div>
                   ) : (
-                    <div
-                      style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 16,
-                        padding: '1rem',
-                        marginBottom: '1.25rem',
-                        color: 'rgba(255,255,255,0.6)',
-                        lineHeight: 1.6,
-                      }}
-                    >
+                    <div className="sectionCard mutedSection">
                       Low match based on your current profile, but this program may still be worth reviewing.
                     </div>
                   )}
@@ -773,20 +429,7 @@ function ResultsContent() {
                       href={grant.url}
                       target="_blank"
                       rel="noreferrer"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        background: 'linear-gradient(90deg, #028090, #02C39A)',
-                        color: 'white',
-                        padding: '0.9rem 1.25rem',
-                        borderRadius: 14,
-                        textDecoration: 'none',
-                        fontWeight: 700,
-                        fontSize: 15,
-                        boxShadow: '0 8px 20px rgba(2,195,154,0.18)',
-                      }}
+                      className="grantButton"
                     >
                       View Grant Details →
                     </a>
@@ -797,31 +440,448 @@ function ResultsContent() {
           </div>
         )}
       </div>
+
+      <style>{baseStyles}</style>
     </div>
   )
 }
 
 export default function ResultsPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          style={{
-            minHeight: '100vh',
-            background: '#0D1F3C',
-            color: 'white',
-            fontFamily: 'system-ui, sans-serif',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '2rem',
-          }}
-        >
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingState />}>
       <ResultsContent />
     </Suspense>
   )
 }
+
+const baseStyles = `
+  .page {
+    min-height: 100vh;
+    background: #0d1f3c;
+    color: white;
+    font-family: system-ui, sans-serif;
+    padding: 24px 16px 40px;
+  }
+
+  .shell {
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+
+  .brandTop {
+    text-align: center;
+    margin-bottom: 28px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #02c39a;
+  }
+
+  .loadingWrap {
+    max-width: 820px;
+    margin: 0 auto;
+    text-align: center;
+    padding-top: 80px;
+  }
+
+  .spinner {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top: 3px solid #02c39a;
+    margin: 0 auto 24px;
+    animation: spin 1s linear infinite;
+  }
+
+  .loadingTitle {
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-weight: 800;
+    margin: 0 0 12px;
+  }
+
+  .loadingText {
+    color: rgba(255,255,255,0.58);
+    font-size: 15px;
+    margin: 0;
+  }
+
+  .errorCard {
+    max-width: 760px;
+    margin: 60px auto 0;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 20px;
+    padding: 24px 22px;
+  }
+
+  .errorTitle {
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-weight: 800;
+    margin: 0 0 10px;
+  }
+
+  .errorText {
+    color: #fecaca;
+    margin: 0;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  .heroBlock {
+    margin-bottom: 24px;
+  }
+
+  .heroBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #02c39a;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  .heroTitle {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 800;
+    line-height: 1.08;
+    margin: 0 0 12px;
+    letter-spacing: -0.03em;
+  }
+
+  .heroText {
+    max-width: 760px;
+    font-size: 16px;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.62);
+    margin: 0 0 16px;
+  }
+
+  .heroNotice {
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #9ff7df;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .panel {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    padding: 22px;
+    margin-bottom: 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  }
+
+  .panelHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .panelTitle {
+    margin: 0;
+    font-size: clamp(1.25rem, 3vw, 1.7rem);
+    font-weight: 800;
+  }
+
+  .panelSubtitle {
+    margin: 6px 0 0;
+    color: rgba(255,255,255,0.52);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .profileBadge {
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(2,128,144,0.18);
+    border: 1px solid rgba(2,128,144,0.35);
+    color: #67e8f9;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .profileGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .profileItem {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .profileLabel {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 8px;
+  }
+
+  .profileValue {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: white;
+  }
+
+  .resultsList {
+    display: grid;
+    gap: 18px;
+  }
+
+  .grantCard {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    padding: 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  }
+
+  .grantTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .grantTopLeft {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .grantBadges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .topMatchBadge {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #02c39a;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  .typeBadge {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.72);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .grantTitle {
+    font-size: clamp(1.45rem, 4vw, 2rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .grantOrg {
+    font-size: 15px;
+    color: rgba(255,255,255,0.58);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .scoreCard {
+    min-width: 140px;
+    text-align: center;
+    padding: 14px 16px;
+    border-radius: 18px;
+    color: white;
+    font-weight: 800;
+    flex: 0 0 auto;
+  }
+
+  .scoreCard.strong {
+    background: linear-gradient(90deg, #02c39a, #028090);
+  }
+
+  .scoreCard.good {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  }
+
+  .scoreCard.possible {
+    background: rgba(255,255,255,0.14);
+  }
+
+  .scoreLabel {
+    font-size: 12px;
+    opacity: 0.95;
+    margin-bottom: 4px;
+  }
+
+  .scoreValue {
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .grantDescription {
+    font-size: 15px;
+    line-height: 1.75;
+    color: rgba(255,255,255,0.82);
+    margin: 0 0 16px;
+  }
+
+  .infoGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .infoItem {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .infoLabel {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 6px;
+  }
+
+  .infoValue {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .sectionCard {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .mutedSection {
+    color: rgba(255,255,255,0.62);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+
+  .sectionTitle {
+    font-size: 15px;
+    font-weight: 800;
+    margin-bottom: 10px;
+  }
+
+  .sectionBody {
+    color: rgba(255,255,255,0.74);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+
+  .matchWhyCard {
+    background: rgba(2,195,154,0.08);
+    border: 1px solid rgba(2,195,154,0.2);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .matchWhyTitle {
+    color: #9ff7df;
+  }
+
+  .reasonsList {
+    padding-left: 18px;
+    margin: 0;
+    color: rgba(255,255,255,0.84);
+  }
+
+  .reasonsList li {
+    margin-bottom: 6px;
+    line-height: 1.55;
+  }
+
+  .grantButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(90deg, #028090, #02c39a);
+    color: white;
+    padding: 14px 18px;
+    border-radius: 14px;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 15px;
+    box-shadow: 0 8px 20px rgba(2,195,154,0.18);
+    max-width: 100%;
+  }
+
+  .emptyText {
+    margin: 0;
+    color: rgba(255,255,255,0.68);
+    font-size: 15px;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 640px) {
+    .page {
+      padding: 18px 14px 32px;
+    }
+
+    .brandTop {
+      font-size: 18px;
+      margin-bottom: 22px;
+    }
+
+    .panel,
+    .grantCard,
+    .errorCard {
+      padding: 18px 16px;
+      border-radius: 18px;
+    }
+
+    .scoreCard {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .grantButton {
+      width: 100%;
+    }
+
+    .heroText,
+    .grantDescription,
+    .sectionBody,
+    .mutedSection {
+      font-size: 14px;
+    }
+  }
+`

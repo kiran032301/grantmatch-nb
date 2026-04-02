@@ -76,6 +76,9 @@ export default function QuizPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const router = useRouter()
 
+  const current = STEPS[step]
+  const progress = ((step + 1) / STEPS.length) * 100
+
   async function saveProfile(data: Record<string, string>) {
     const doesRdValue =
       data.does_rd === 'Yes — we develop new products or technology'
@@ -117,7 +120,6 @@ export default function QuizPage() {
       return null
     }
 
-    console.log('Profile saved successfully:', insertedProfile)
     return insertedProfile
   }
 
@@ -133,7 +135,7 @@ export default function QuizPage() {
       setSelected(null)
 
       if (step < STEPS.length - 1) {
-        setStep(step + 1)
+        setStep((prev) => prev + 1)
         return
       }
 
@@ -156,248 +158,368 @@ export default function QuizPage() {
       } finally {
         setIsSaving(false)
       }
-    }, 300)
+    }, 220)
   }
 
-  const current = STEPS[step]
-  const progress = (step / STEPS.length) * 100
+  function goBack() {
+    if (step === 0 || isSaving) return
+    setErrorMessage(null)
+    setSelected(null)
+    setStep((prev) => prev - 1)
+  }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0D1F3C',
-        color: 'white',
-        fontFamily: 'system-ui, sans-serif',
-        padding: '2rem 1.5rem',
-      }}
-    >
-      <div
-        style={{
-          textAlign: 'center',
-          marginBottom: '2.5rem',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#02C39A',
-          }}
-        >
-          GrantMatch NB
-        </span>
+    <main className="page">
+      <div className="topBrand">
+        <span className="brand">GrantMatch NB</span>
       </div>
 
-      <div
-        style={{
-          maxWidth: 560,
-          margin: '0 auto 2.5rem',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginBottom: 8,
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-            Question {step + 1} of {STEPS.length}
-          </span>
-          <span style={{ fontSize: 13, color: '#02C39A', fontWeight: 600 }}>
-            {Math.round((step / STEPS.length) * 100)}% complete
-          </span>
-        </div>
-
-        <div
-          style={{
-            height: 6,
-            background: 'rgba(255,255,255,0.1)',
-            borderRadius: 3,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: progress + '%',
-              background: 'linear-gradient(90deg, #028090, #02C39A)',
-              borderRadius: 3,
-              transition: 'width 0.4s ease',
-            }}
-          />
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: 10,
-          }}
-        >
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background:
-                  i < step
-                    ? '#02C39A'
-                    : i === step
-                    ? '#028090'
-                    : 'rgba(255,255,255,0.15)',
-                transition: 'background 0.3s',
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div
-        style={{
-          maxWidth: 560,
-          margin: '0 auto',
-        }}
-      >
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 16,
-            padding: '2rem',
-            marginBottom: '1.5rem',
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              lineHeight: 1.3,
-              marginBottom: 8,
-              color: 'white',
-            }}
-          >
-            {current.question}
-          </h2>
-          <p
-            style={{
-              fontSize: 14,
-              color: 'rgba(255,255,255,0.45)',
-              margin: 0,
-            }}
-          >
-            {current.subtitle}
-          </p>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-          }}
-        >
-          {current.options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => selectOption(opt)}
-              disabled={isSaving}
-              style={{
-                padding: '15px 20px',
-                textAlign: 'left',
-                border:
-                  selected === opt
-                    ? '1.5px solid #02C39A'
-                    : '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 12,
-                background:
-                  selected === opt
-                    ? 'rgba(2,195,154,0.15)'
-                    : 'rgba(255,255,255,0.04)',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                fontSize: 15,
-                color:
-                  selected === opt ? '#02C39A' : 'rgba(255,255,255,0.85)',
-                fontWeight: selected === opt ? 600 : 400,
-                transition: 'all 0.15s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                opacity: isSaving ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (selected !== opt && !isSaving) {
-                  e.currentTarget.style.borderColor = 'rgba(2,195,154,0.4)'
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (selected !== opt && !isSaving) {
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                }
-              }}
-            >
-              <span>{opt}</span>
-              {selected === opt && (
-                <span style={{ fontSize: 18, color: '#02C39A' }}>✓</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {errorMessage && (
-          <div
-            style={{
-              marginTop: '1rem',
-              padding: '0.9rem 1rem',
-              borderRadius: 12,
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.35)',
-              color: '#fecaca',
-              fontSize: 14,
-            }}
-          >
-            {errorMessage}
+      <div className="container">
+        <div className="progressWrap">
+          <div className="progressHeader">
+            <span className="mutedText">
+              Question {step + 1} of {STEPS.length}
+            </span>
+            <span className="progressText">{Math.round(progress)}% complete</span>
           </div>
-        )}
+
+          <div className="progressBarTrack">
+            <div
+              className="progressBarFill"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="dotsRow">
+            {STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={`dot ${i < step ? 'done' : ''} ${i === step ? 'active' : ''}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="questionCard">
+          <div className="questionBadge">NB Funding Match Quiz</div>
+
+          <h1 className="questionTitle">{current.question}</h1>
+
+          <p className="questionSubtitle">{current.subtitle}</p>
+        </div>
+
+        <div className="optionsList">
+          {current.options.map((opt) => {
+            const isSelected = selected === opt
+
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => selectOption(opt)}
+                disabled={isSaving}
+                className={`optionButton ${isSelected ? 'selected' : ''}`}
+              >
+                <span className="optionText">{opt}</span>
+                <span className={`optionCheck ${isSelected ? 'visible' : ''}`}>✓</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {errorMessage && <div className="errorBox">{errorMessage}</div>}
 
         {isSaving && (
-          <div
-            style={{
-              marginTop: '1rem',
-              color: 'rgba(255,255,255,0.65)',
-              fontSize: 14,
-            }}
-          >
-            Saving your answers and finding matches...
+          <div className="savingText">
+            Saving your answers and preparing your personalized matches...
           </div>
         )}
 
-        {step > 0 && !isSaving && (
-          <button
-            onClick={() => setStep(step - 1)}
-            style={{
-              marginTop: '1.5rem',
-              padding: '8px 0',
-              border: 'none',
-              background: 'none',
-              color: 'rgba(255,255,255,0.35)',
-              cursor: 'pointer',
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            ← Back to previous question
-          </button>
-        )}
+        <div className="footerActions">
+          {step > 0 && !isSaving ? (
+            <button type="button" onClick={goBack} className="backButton">
+              ← Back to previous question
+            </button>
+          ) : (
+            <div />
+          )}
+
+          <div className="stepIndicator">
+            Step {step + 1} / {STEPS.length}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <style>{`
+        .page {
+          min-height: 100vh;
+          background: #0d1f3c;
+          color: white;
+          font-family: system-ui, sans-serif;
+          padding: 24px 16px 40px;
+        }
+
+        .topBrand {
+          text-align: center;
+          margin-bottom: 28px;
+        }
+
+        .brand {
+          font-size: 20px;
+          font-weight: 700;
+          color: #02c39a;
+        }
+
+        .container {
+          max-width: 760px;
+          margin: 0 auto;
+        }
+
+        .progressWrap {
+          max-width: 640px;
+          margin: 0 auto 24px;
+        }
+
+        .progressHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 10px;
+          flex-wrap: wrap;
+        }
+
+        .mutedText {
+          font-size: 13px;
+          color: rgba(255, 255, 255, 0.48);
+        }
+
+        .progressText {
+          font-size: 13px;
+          color: #02c39a;
+          font-weight: 700;
+        }
+
+        .progressBarTrack {
+          height: 8px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+
+        .progressBarFill {
+          height: 100%;
+          background: linear-gradient(90deg, #028090, #02c39a);
+          border-radius: 999px;
+          transition: width 0.35s ease;
+        }
+
+        .dotsRow {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.16);
+          transition: all 0.25s ease;
+          flex: 0 0 auto;
+        }
+
+        .dot.done {
+          background: #02c39a;
+        }
+
+        .dot.active {
+          background: #028090;
+          transform: scale(1.15);
+        }
+
+        .questionCard {
+          max-width: 640px;
+          margin: 0 auto 18px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 20px;
+          padding: 28px 24px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+        }
+
+        .questionBadge {
+          display: inline-block;
+          margin-bottom: 14px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: rgba(2, 195, 154, 0.1);
+          border: 1px solid rgba(2, 195, 154, 0.22);
+          color: #02c39a;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+        }
+
+        .questionTitle {
+          font-size: clamp(1.5rem, 4vw, 2.2rem);
+          line-height: 1.2;
+          font-weight: 800;
+          margin: 0 0 10px;
+          letter-spacing: -0.02em;
+        }
+
+        .questionSubtitle {
+          font-size: 15px;
+          color: rgba(255, 255, 255, 0.58);
+          margin: 0;
+          line-height: 1.65;
+        }
+
+        .optionsList {
+          max-width: 640px;
+          margin: 0 auto;
+          display: grid;
+          gap: 12px;
+        }
+
+        .optionButton {
+          width: 100%;
+          border-radius: 16px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.04);
+          color: rgba(255, 255, 255, 0.88);
+          padding: 16px 18px;
+          text-align: left;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          transition: border-color 0.2s ease, background 0.2s ease, transform 0.12s ease;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .optionButton:hover:not(:disabled) {
+          border-color: rgba(2, 195, 154, 0.4);
+          background: rgba(255, 255, 255, 0.07);
+          transform: translateY(-1px);
+        }
+
+        .optionButton:disabled {
+          cursor: not-allowed;
+          opacity: 0.72;
+        }
+
+        .optionButton.selected {
+          border: 1.5px solid #02c39a;
+          background: rgba(2, 195, 154, 0.14);
+          color: #02c39a;
+        }
+
+        .optionText {
+          font-size: 15px;
+          line-height: 1.5;
+          font-weight: 500;
+        }
+
+        .optionCheck {
+          font-size: 18px;
+          color: #02c39a;
+          opacity: 0;
+          transform: scale(0.8);
+          transition: opacity 0.18s ease, transform 0.18s ease;
+          flex: 0 0 auto;
+        }
+
+        .optionCheck.visible {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        .errorBox {
+          max-width: 640px;
+          margin: 16px auto 0;
+          padding: 14px 16px;
+          border-radius: 14px;
+          background: rgba(239, 68, 68, 0.12);
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          color: #fecaca;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .savingText {
+          max-width: 640px;
+          margin: 16px auto 0;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .footerActions {
+          max-width: 640px;
+          margin: 18px auto 0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .backButton {
+          border: none;
+          background: none;
+          color: rgba(255, 255, 255, 0.42);
+          cursor: pointer;
+          font-size: 14px;
+          padding: 8px 0;
+          transition: color 0.2s ease;
+        }
+
+        .backButton:hover {
+          color: rgba(255, 255, 255, 0.72);
+        }
+
+        .stepIndicator {
+          font-size: 13px;
+          color: rgba(255, 255, 255, 0.35);
+        }
+
+        @media (max-width: 640px) {
+          .page {
+            padding: 18px 14px 32px;
+          }
+
+          .topBrand {
+            margin-bottom: 22px;
+          }
+
+          .brand {
+            font-size: 18px;
+          }
+
+          .questionCard {
+            padding: 22px 18px;
+            border-radius: 18px;
+          }
+
+          .optionButton {
+            padding: 15px 14px;
+            border-radius: 14px;
+          }
+
+          .optionText {
+            font-size: 14px;
+          }
+
+          .footerActions {
+            align-items: flex-start;
+          }
+        }
+      `}</style>
+    </main>
   )
 }
