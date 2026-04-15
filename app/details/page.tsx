@@ -26,28 +26,68 @@ function DetailsContent() {
       return
     }
 
+    if (!businessName.trim()) {
+      setMessage('Business Name is required.')
+      return
+    }
+
+    if (!email.trim()) {
+      setMessage('Email Address is required.')
+      return
+    }
+
+    if (!phone.trim()) {
+      setMessage('Phone Number is required.')
+      return
+    }
+
     try {
       setLoading(true)
       setMessage('')
 
-      const { error } = await supabase.from('leads').insert([
+      const cleanedBusinessName = businessName.trim()
+      const cleanedContactName = contactName.trim() || null
+      const cleanedEmail = email.trim()
+      const cleanedPhone = phone.trim()
+      const cleanedNotes = notes.trim() || null
+
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({
+          business_name: cleanedBusinessName,
+          contact_name: cleanedContactName,
+          email: cleanedEmail,
+          phone: cleanedPhone,
+          notes: cleanedNotes,
+        })
+        .eq('id', profileId)
+
+      if (profileError) {
+        console.error('Could not save profile details:', profileError)
+        setMessage(profileError.message || 'Could not save your details. Please try again.')
+        return
+      }
+
+      const { error: leadError } = await supabase.from('leads').insert([
         {
           profile_id: profileId,
-          business_name: businessName || null,
-          contact_name: contactName || null,
-          email: email || null,
-          phone: phone || null,
-          notes: notes || null,
+          business_name: cleanedBusinessName,
+          contact_name: cleanedContactName,
+          email: cleanedEmail,
+          phone: cleanedPhone,
+          notes: cleanedNotes,
         },
       ])
 
-      if (error) {
-        setMessage('Could not save your details. Please try again.')
+      if (leadError) {
+        console.error('Could not save lead record:', leadError)
+        setMessage(leadError.message || 'Could not save your lead details. Please try again.')
         return
       }
 
       router.push(`/results?profileId=${profileId}`)
-    } catch {
+    } catch (error) {
+      console.error('Details submit error:', error)
       setMessage('Something went wrong.')
     } finally {
       setLoading(false)
@@ -67,7 +107,7 @@ function DetailsContent() {
           <h1 className="title">Almost done 🚀</h1>
 
           <p className="subtitle">
-            Enter your details to unlock your personalized funding matches.
+            Enter your business details to unlock your personalized funding matches.
           </p>
 
           <div className="trust">
@@ -76,7 +116,7 @@ function DetailsContent() {
 
           <form onSubmit={handleSubmit} className="form">
             <input
-              placeholder="Business Name"
+              placeholder="Business Name *"
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
               className="input"
@@ -90,14 +130,15 @@ function DetailsContent() {
             />
 
             <input
-              placeholder="Email Address"
+              type="email"
+              placeholder="Email Address *"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input"
             />
 
             <input
-              placeholder="Phone Number"
+              placeholder="Phone Number *"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="input"

@@ -1,162 +1,145 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-type Profile = {
-  id: string
-  business_name: string | null
-  industry: string | null
-  stage: string | null
-  employees: number | null
-  does_rd: boolean | null
-  goal: string | null
+import {
+  type Profile,
+  type Grant,
+  type ScoredGrant,
+} from '@/lib/grantMatching'
+import { jsPDF } from 'jspdf'
+import { saveAs } from 'file-saver'
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+} from 'docx'
+import { useTranslation } from 'react-i18next'
+import '@/lib/i18n'
+
+const FREE_VISIBLE_COUNT = 2
+const FULL_REPORT_COUNT = 5
+
+function getGrantName(grant: Grant, language: string) {
+  if (language.startsWith('fr')) {
+    return (
+      (grant as Grant & { name_fr?: string | null }).name_fr ||
+      grant.name ||
+      'Programme sans nom'
+    )
+  }
+
+  return grant.name || 'Unnamed Program'
 }
 
-type Grant = {
-  id: string
-  name: string
-  organization: string | null
-  amount_max: number | null
-  type: string | null
-  repayable: boolean | null
-  description: string | null
-  eligibility: string | null
-  industry_tags: string[] | string | null
-  intake_status: string | null
-  url: string | null
+function getGrantDescription(grant: Grant, language: string) {
+  if (language.startsWith('fr')) {
+    return (
+      (grant as Grant & { description_fr?: string | null }).description_fr ||
+      grant.short_description ||
+      grant.description ||
+      'Aucune description disponible.'
+    )
+  }
+
+  return grant.short_description || grant.description || 'No description available.'
 }
 
-type ScoredGrant = Grant & {
-  score: number
-  reasons: string[]
+function getGrantEligibility(grant: Grant, language: string) {
+  const g = grant as Grant & {
+    eligibility_fr?: string | null
+    eligibility_summary_fr?: string | null
+  }
+
+  if (language.startsWith('fr')) {
+    return (
+      g.eligibility_summary_fr ||
+      g.eligibility_fr ||
+      grant.eligibility_summary ||
+      grant.eligibility ||
+      'Non précisé'
+    )
+  }
+
+  return grant.eligibility_summary || grant.eligibility || 'Not specified'
 }
 
-function mapIndustryToTag(industry: string | null) {
-  if (!industry) return null
-
-  const value = industry.toLowerCase()
-
-  if (value.includes('technology') || value.includes('software')) return 'technology'
-  if (value.includes('manufacturing')) return 'manufacturing'
-  if (value.includes('agriculture')) return 'agriculture'
-  if (value.includes('health')) return 'health'
-  if (value.includes('clean energy') || value.includes('cleantech')) return 'cleantech'
-  if (value.includes('retail')) return 'retail'
-  if (value.includes('hospitality')) return 'hospitality'
-  if (value.includes('professional services')) return 'services'
-
-  return null
+function getGrantFundingType(grant: Grant) {
+  return grant.funding_type || grant.type || 'Program'
 }
 
-function normalizeIndustryTags(tags: string[] | string | null): string[] {
-  if (!tags) return []
+/* ✅ ADD THIS HERE */
+function translateReason(reason: string, language: string) {
+  if (!language.startsWith('fr')) return reason
 
-  if (Array.isArray(tags)) {
-    return tags.map((tag) => String(tag).trim().toLowerCase())
+  const map: Record<string, string> = {
+    'Widely applicable across different business types.':
+      'Applicable à différents types d’entreprises.',
+    'This program supports your goal of R&D / commercialization.':
+      'Ce programme soutient votre objectif de R-D / commercialisation.',
+    'This program may support innovation or R&D initiatives.':
+      'Ce programme peut soutenir des initiatives d’innovation ou de R-D.',
+    'This aligns with your preferred type of funding.':
+      'Cela correspond à votre type de financement préféré.',
+    'Less aligned with your funding preference.':
+      'Moins aligné avec votre préférence de financement.',
+    'Applications are currently open, so you can apply now.':
+      'Les demandes sont actuellement ouvertes.',
+    'This program accepts applications on a rolling basis.':
+      'Ce programme accepte les demandes en continu.',
+    'This program will be opening for applications soon.':
+      'Ce programme ouvrira bientôt.',
   }
 
-  if (typeof tags === 'string') {
-    return tags
-      .split(',')
-      .map((tag) => tag.trim().toLowerCase())
-      .filter(Boolean)
-  }
-
-  return []
+  return map[reason] || reason
 }
 
-function scoreGrant(profile: Profile, grant: Grant): ScoredGrant {
-  let score = 0
-  const reasons: string[] = []
-
-  const industryTag = mapIndustryToTag(profile.industry)
-  const grantTags = normalizeIndustryTags(grant.industry_tags)
-  const searchableText =
-    `${grant.name ?? ''} ${grant.description ?? ''} ${grant.eligibility ?? ''}`.toLowerCase()
-
-  if (industryTag && grantTags.includes(industryTag)) {
-    score += 40
-    reasons.push(`Matches your industry: ${profile.industry}`)
+function getScoreMeta(percent: number, t: (key: string) => string) {
+  if (percent >= 90) {
+    return { label: t('results.excellentMatch'), className: 'strong' }
   }
-
-  if (profile.does_rd === true) {
-    if (
-      searchableText.includes('r&d') ||
-      searchableText.includes('research') ||
-      searchableText.includes('innovation') ||
-      searchableText.includes('technology') ||
-      searchableText.includes('development')
-    ) {
-      score += 30
-      reasons.push('Strong fit for R&D / innovation activity')
-    }
+  if (percent >= 75) {
+    return { label: t('results.strongMatch'), className: 'strong' }
   }
-
-  if (profile.goal) {
-    const goal = profile.goal.toLowerCase()
-
-    if (
-      (goal.includes('hiring') && (searchableText.includes('hiring') || searchableText.includes('staff'))) ||
-      (goal.includes('r&d') &&
-        (searchableText.includes('r&d') ||
-          searchableText.includes('research') ||
-          searchableText.includes('development') ||
-          searchableText.includes('innovation'))) ||
-      (goal.includes('equipment') &&
-        (searchableText.includes('equipment') ||
-          searchableText.includes('capital') ||
-          searchableText.includes('expansion'))) ||
-      (goal.includes('training') && searchableText.includes('training')) ||
-      (goal.includes('growth') &&
-        (searchableText.includes('growth') ||
-          searchableText.includes('commercialization') ||
-          searchableText.includes('expansion'))) ||
-      (goal.includes('export') &&
-        (searchableText.includes('export') || searchableText.includes('market')))
-    ) {
-      score += 20
-      reasons.push(`Supports your funding goal: ${profile.goal}`)
-    }
+  if (percent >= 60) {
+    return { label: t('results.goodMatch'), className: 'good' }
   }
-
-  if ((grant.intake_status ?? '').toLowerCase() === 'open') {
-    score += 10
-    reasons.push('Currently open')
-  }
-
-  return {
-    ...grant,
-    score,
-    reasons,
-  }
+  return { label: t('results.weakMatch'), className: 'weak' }
 }
 
-function getScoreMeta(score: number) {
-  if (score >= 70) {
-    return {
-      label: 'Strong Match',
-      className: 'strong',
-    }
-  }
-
-  if (score >= 40) {
-    return {
-      label: 'Good Match',
-      className: 'good',
-    }
-  }
-
-  return {
-    label: 'Possible Match',
-    className: 'possible',
-  }
+function formatAmount(amount: number | null, t: (key: string) => string) {
+  if (!amount) return t('common.notSpecified')
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    maximumFractionDigits: 0,
+  }).format(amount)
 }
 
-function formatAmount(amount: number | null) {
-  if (!amount) return 'Not specified'
-  return `$${amount.toLocaleString()}`
+function formatFundingType(grant: Grant, t: (key: string) => string) {
+  const name = (grant.name || '').toLowerCase()
+  const fundingType = (grant.funding_type || grant.type || '').toLowerCase()
+
+  if (name.includes('venture') || name.includes('capital')) {
+    return t('results.equityInvestment')
+  }
+
+  if (fundingType.includes('loan') || grant.repayable === true) {
+    return t('results.loanRepayment')
+  }
+
+  if (fundingType.includes('tax_credit')) return t('results.taxCredit')
+  if (fundingType.includes('rebate')) return t('results.rebate')
+
+  if (fundingType.includes('grant') || grant.repayable === false) {
+    return t('results.grantNoRepayment')
+  }
+
+  return getGrantFundingType(grant)
 }
 
 function LoadingState() {
@@ -164,67 +147,215 @@ function LoadingState() {
     <div className="page">
       <div className="loadingWrap">
         <div className="spinner" />
-        <h1 className="loadingTitle">Finding your best grant matches...</h1>
-        <p className="loadingText">
-          We are reviewing funding programs based on your answers.
-        </p>
+        <h1 className="loadingTitle">Loading your best grant matches...</h1>
+        <p className="loadingText">Please wait while we prepare your results.</p>
       </div>
-
-      <style>{baseStyles}</style>
+      <style>{styles}</style>
     </div>
   )
 }
 
 function ErrorState({ error }: { error: string }) {
+  const { t } = useTranslation()
+
   return (
     <div className="page">
       <div className="shell">
-        <div className="brandTop">GrantMatch NB</div>
-
+        <div className="brandTop">{t('common.brand')}</div>
         <div className="errorCard">
-          <h1 className="errorTitle">Something went wrong</h1>
+          <h1 className="errorTitle">{t('results.errorTitle')}</h1>
           <p className="errorText">{error}</p>
         </div>
       </div>
-
-      <style>{baseStyles}</style>
+      <style>{styles}</style>
     </div>
   )
+}
+
+function getFundingMixBuckets(
+  grants: Array<{
+    id: string
+    name?: string | null
+    goal_tags?: string[] | string | null
+    description?: string | null
+    short_description?: string | null
+  }>
+) {
+  const buckets: {
+    hiring: (typeof grants)[number] | null
+    equipment: (typeof grants)[number] | null
+    innovation: (typeof grants)[number] | null
+    growth: (typeof grants)[number] | null
+  } = {
+    hiring: null,
+    equipment: null,
+    innovation: null,
+    growth: null,
+  }
+
+  function normalizeGoalTags(tags: string[] | string | null | undefined): string[] {
+    if (!tags) return []
+    if (Array.isArray(tags)) return tags.map((t) => String(t).toLowerCase())
+
+    return String(tags)
+      .replace(/[{}"]/g, '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean)
+  }
+
+  for (const grant of grants) {
+    const tags = normalizeGoalTags(grant.goal_tags)
+    const text =
+      `${grant.name || ''} ${grant.short_description || ''} ${grant.description || ''}`.toLowerCase()
+
+    if (
+      !buckets.hiring &&
+      (
+        tags.includes('hiring') ||
+        tags.includes('training') ||
+        text.includes('hire') ||
+        text.includes('hiring') ||
+        text.includes('staff') ||
+        text.includes('workforce') ||
+        text.includes('training')
+      )
+    ) {
+      buckets.hiring = grant
+      continue
+    }
+
+    if (
+      !buckets.equipment &&
+      (
+        tags.includes('equipment') ||
+        tags.includes('investment') ||
+        text.includes('equipment') ||
+        text.includes('machinery') ||
+        text.includes('capital') ||
+        text.includes('investment')
+      )
+    ) {
+      buckets.equipment = grant
+      continue
+    }
+
+    if (
+      !buckets.innovation &&
+      (
+        tags.includes('innovation') ||
+        tags.includes('r_and_d') ||
+        tags.includes('product_development') ||
+        text.includes('innovation') ||
+        text.includes('research') ||
+        text.includes('r&d') ||
+        text.includes('technology') ||
+        text.includes('product development')
+      )
+    ) {
+      buckets.innovation = grant
+      continue
+    }
+
+    if (
+      !buckets.growth &&
+      (
+        tags.includes('market_expansion') ||
+        tags.includes('export') ||
+        tags.includes('working_capital') ||
+        text.includes('growth') ||
+        text.includes('expand') ||
+        text.includes('expansion') ||
+        text.includes('export')
+      )
+    ) {
+      buckets.growth = grant
+    }
+  }
+
+  return [
+    buckets.hiring && { label: 'Hiring Support', grant: buckets.hiring },
+    buckets.equipment && { label: 'Equipment / Investment', grant: buckets.equipment },
+    buckets.innovation && { label: 'Innovation / R&D', grant: buckets.innovation },
+    buckets.growth && { label: 'Growth / Expansion', grant: buckets.growth },
+  ].filter(Boolean) as Array<{ label: string; grant: NonNullable<(typeof grants)[number]> }>
 }
 
 function ResultsContent() {
   const searchParams = useSearchParams()
   const profileId = searchParams.get('profileId')
+  const { t, i18n } = useTranslation()
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [matches, setMatches] = useState<ScoredGrant[]>([])
+  const [evaluatedProgramsCount, setEvaluatedProgramsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [showDraftModal, setShowDraftModal] = useState(false)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [selectedDraftGrant, setSelectedDraftGrant] = useState<ScoredGrant | null>(null)
+  const [draftLanguage, setDraftLanguage] = useState<'en' | 'fr'>('en')
+  const [draftContent, setDraftContent] = useState<{
+    title: string
+    executive_summary: string
+    business_overview: string
+    project_alignment: string
+    use_of_funds: string
+    expected_impact: string
+    closing_statement: string
+  } | null>(null)
+
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestNotes, setRequestNotes] = useState('')
+  const [requestLoading, setRequestLoading] = useState(false)
+  const [requestSuccess, setRequestSuccess] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
+
+  const [alertEmail, setAlertEmail] = useState('')
+  const [alertDaysBefore, setAlertDaysBefore] = useState(7)
+  const [alertsLoading, setAlertsLoading] = useState(false)
+  const [alertsSuccess, setAlertsSuccess] = useState<string | null>(null)
+  const [alertsError, setAlertsError] = useState<string | null>(null)
+
+  const [hasPremiumAccess, setHasPremiumAccess] = useState(false)
+  const [premiumChecked, setPremiumChecked] = useState(false)
 
   useEffect(() => {
     async function saveMatches(profileIdValue: string, scoredMatches: ScoredGrant[]) {
       try {
-        const { error: deleteError } = await supabase
-          .from('profile_matches')
-          .delete()
-          .eq('profile_id', profileIdValue)
+        const uniqueByGrantKey = Array.from(
+          new Map(
+            scoredMatches.map((grant) => [
+              grant.url || `${grant.name}-${grant.organization || ''}`,
+              grant,
+            ])
+          ).values()
+        )
 
-        console.log('Delete old matches error:', deleteError)
+        const topMatches = uniqueByGrantKey.slice(0, FULL_REPORT_COUNT)
 
-        const rows = scoredMatches.map((grant) => ({
+        if (topMatches.length === 0) {
+          return
+        }
+
+        const rows = topMatches.map((grant) => ({
           profile_id: profileIdValue,
           grant_id: grant.id,
           score: grant.score,
           reasons: grant.reasons,
         }))
 
-        const { data, error } = await supabase
+        const { error: upsertError } = await supabase
           .from('profile_matches')
-          .insert(rows)
-          .select()
+          .upsert(rows, {
+            onConflict: 'profile_id,grant_id',
+          })
 
-        console.log('Inserted rows:', data)
-        console.log('Insert error:', error)
+        if (upsertError) {
+          console.error('Save matches upsert failed:', upsertError)
+        }
       } catch (err) {
         console.error('Save matches failed:', err)
       }
@@ -244,12 +375,21 @@ function ResultsContent() {
           .eq('id', profileId)
           .maybeSingle()
 
-        console.log('profileId from URL:', profileId)
-        console.log('profileData:', profileData)
-        console.log('profileError:', profileError)
+        const premiumRes = await fetch(
+          `/api/premium-access?profileId=${encodeURIComponent(profileId)}`,
+          { cache: 'no-store' }
+        )
+
+        const premiumJson = await premiumRes.json()
+
+        if (!premiumRes.ok) {
+          console.error('Could not load premium access:', premiumJson?.error)
+        }
+
+        setHasPremiumAccess(!!premiumJson?.isActive)
+        setPremiumChecked(true)
 
         if (profileError) {
-          console.error('Profile fetch error:', profileError)
           setError(`Could not load your profile: ${profileError.message}`)
           setLoading(false)
           return
@@ -261,36 +401,35 @@ function ResultsContent() {
           return
         }
 
-        setProfile(profileData)
+        setPremiumChecked(true)
+        setProfile(profileData as Profile)
+        setAlertEmail((profileData as { email?: string | null }).email || '')
 
-        const { data: grantsData, error: grantsError } = await supabase
-          .from('grants')
-          .select('*')
-          .eq('intake_status', 'open')
+        const matchRes = await fetch('/api/match-grants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId }),
+        })
 
-        console.log('grantsData:', grantsData)
-        console.log('grantsError:', grantsError)
+        const matchJson = await matchRes.json()
 
-        if (grantsError) {
-          console.error('Grant fetch error:', grantsError)
-          setError(`Could not load grants: ${grantsError.message}`)
+        if (!matchRes.ok) {
+          setError(matchJson?.error || 'Could not calculate matches.')
           setLoading(false)
           return
         }
 
-        if (!grantsData || grantsData.length === 0) {
-          setMatches([])
-          setLoading(false)
-          return
-        }
+        const hybridMatches = (matchJson.matches || []) as ScoredGrant[]
 
-        const scored = grantsData
-          .map((grant) => scoreGrant(profileData, grant))
-          .sort((a, b) => b.score - a.score)
-
-        setMatches(scored)
+        setEvaluatedProgramsCount(
+          typeof matchJson.evaluatedProgramsCount === 'number'
+            ? matchJson.evaluatedProgramsCount
+            : hybridMatches.length
+        )
+        setMatches(hybridMatches)
         setLoading(false)
-        await saveMatches(profileId, scored)
+
+        await saveMatches(profileId, hybridMatches)
       } catch (err) {
         console.error('Unexpected results page error:', err)
         setError('Something went wrong while loading matches.')
@@ -301,27 +440,413 @@ function ResultsContent() {
     loadMatches()
   }, [profileId])
 
-  if (loading) {
-    return <LoadingState />
+  const visibleMatches = useMemo(() => matches.slice(0, FREE_VISIBLE_COUNT), [matches])
+  const totalMatchesCount = matches.length
+  const fullReportCount = totalMatchesCount
+  const lockedMatchesCount = Math.max(fullReportCount - FREE_VISIBLE_COUNT, 0)
+  const showPremiumSection = lockedMatchesCount > 0
+  const fundingMixItems = useMemo(() => getFundingMixBuckets(visibleMatches), [visibleMatches])
+
+  async function handleRequestFullReport() {
+  try {
+    if (!profileId) {
+      setRequestError('Missing profile ID.')
+      return
+    }
+
+    if (!profile) {
+      setRequestError('Missing profile details.')
+      return
+    }
+
+    const profileWithContact = profile as Profile & {
+      email?: string | null
+      phone?: string | null
+      contact_name?: string | null
+    }
+
+    if (!profile.business_name?.trim()) {
+      setRequestError('Missing business name in your saved profile.')
+      return
+    }
+
+    if (!profileWithContact.email?.trim()) {
+      setRequestError('Missing email in your saved profile.')
+      return
+    }
+
+    if (!profileWithContact.phone?.trim()) {
+      setRequestError('Missing phone number in your saved profile.')
+      return
+    }
+
+    setRequestLoading(true)
+    setRequestError(null)
+
+    const { error } = await supabase.from('report_requests').insert([
+      {
+        profile_id: profileId,
+        business_name: profile.business_name || null,
+        email: profileWithContact.email || null,
+        phone: profileWithContact.phone || null,
+        notes: requestNotes || null,
+        status: 'new',
+      },
+    ])
+
+    if (error) {
+      setRequestError('Could not submit your request. Please try again.')
+      return
+    }
+
+    setRequestSuccess(true)
+  } catch (err) {
+    console.error('Request full report error:', err)
+    setRequestError('Something went wrong while sending your request.')
+  } finally {
+    setRequestLoading(false)
+  }
+}
+
+  async function handleEnableDeadlineAlerts() {
+    try {
+      if (!profileId) {
+        setAlertsError('Missing profile ID.')
+        return
+      }
+
+      if (!alertEmail.trim()) {
+        setAlertsError('Please enter an email address for alerts.')
+        return
+      }
+
+      setAlertsLoading(true)
+      setAlertsError(null)
+      setAlertsSuccess(null)
+
+      const res = await fetch('/api/deadline-alerts/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profileId,
+          email: alertEmail,
+          daysBefore: alertDaysBefore,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        setAlertsError(json?.error || 'Could not enable alerts.')
+        return
+      }
+
+      setAlertsSuccess(t('results.deadlineAlertsEnabled'))
+    } catch (err) {
+      console.error('Deadline alert subscription error:', err)
+      setAlertsError('Something went wrong while enabling alerts.')
+    } finally {
+      setAlertsLoading(false)
+    }
   }
 
-  if (error) {
-    return <ErrorState error={error} />
+  async function handleGenerateDraft(grant: ScoredGrant) {
+    try {
+      if (!profileId) {
+        setDraftError('Missing profile ID.')
+        return
+      }
+
+      setSelectedDraftGrant(grant)
+      setShowDraftModal(true)
+      setDraftLoading(true)
+      setDraftError(null)
+      setDraftContent(null)
+
+      const res = await fetch('/api/generate-application-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profileId,
+          grantId: grant.id,
+          language: draftLanguage,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        setDraftError(json?.error || 'Could not generate draft.')
+        return
+      }
+
+      setDraftContent(json.draft)
+    } catch (error) {
+      console.error('Draft generation error:', error)
+      setDraftError('Something went wrong while generating the draft.')
+    } finally {
+      setDraftLoading(false)
+    }
   }
+
+  function getDraftFileBaseName() {
+    const business = (profile?.business_name || 'business').replace(/[^\w\-]+/g, '_')
+    const grant = (selectedDraftGrant?.name || 'grant').replace(/[^\w\-]+/g, '_')
+    const suffix = draftLanguage === 'fr' ? 'demande_financement' : 'application_draft'
+    return `${business}_${grant}_${suffix}`
+  }
+
+  async function handleDownloadDraftPdf() {
+    if (!draftContent) return
+
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 14
+    const maxWidth = pageWidth - margin * 2
+    let y = 18
+
+    const addSection = (title: string, body: string) => {
+      if (y > pageHeight - 30) {
+        doc.addPage()
+        y = 18
+      }
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.text(title, margin, y)
+      y += 8
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(11)
+      const lines = doc.splitTextToSize(body || '', maxWidth)
+      doc.text(lines, margin, y)
+      y += lines.length * 6 + 8
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(16)
+    doc.text(draftContent.title || 'Application Draft', margin, y)
+    y += 12
+
+    addSection(
+      draftLanguage === 'fr' ? 'Résumé exécutif' : 'Executive Summary',
+      draftContent.executive_summary
+    )
+    addSection(
+      draftLanguage === 'fr' ? "Présentation de l'entreprise" : 'Business Overview',
+      draftContent.business_overview
+    )
+    addSection(
+      draftLanguage === 'fr' ? 'Alignement du projet' : 'Project Alignment',
+      draftContent.project_alignment
+    )
+    addSection(
+      draftLanguage === 'fr' ? 'Utilisation des fonds' : 'Use of Funds',
+      draftContent.use_of_funds
+    )
+    addSection(
+      draftLanguage === 'fr' ? 'Impact attendu' : 'Expected Impact',
+      draftContent.expected_impact
+    )
+    addSection(
+      draftLanguage === 'fr' ? 'Conclusion' : 'Closing Statement',
+      draftContent.closing_statement
+    )
+
+    doc.save(`${getDraftFileBaseName()}.pdf`)
+  }
+
+  async function handleDownloadDraftWord() {
+    if (!draftContent) return
+
+    const labels =
+      draftLanguage === 'fr'
+        ? {
+            executive_summary: 'Résumé exécutif',
+            business_overview: "Présentation de l'entreprise",
+            project_alignment: 'Alignement du projet',
+            use_of_funds: 'Utilisation des fonds',
+            expected_impact: 'Impact attendu',
+            closing_statement: 'Conclusion',
+          }
+        : {
+            executive_summary: 'Executive Summary',
+            business_overview: 'Business Overview',
+            project_alignment: 'Project Alignment',
+            use_of_funds: 'Use of Funds',
+            expected_impact: 'Expected Impact',
+            closing_statement: 'Closing Statement',
+          }
+
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              text: draftContent.title || 'Application Draft',
+              heading: HeadingLevel.TITLE,
+            }),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.executive_summary, bold: true })],
+            }),
+            new Paragraph(draftContent.executive_summary || ''),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.business_overview, bold: true })],
+            }),
+            new Paragraph(draftContent.business_overview || ''),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.project_alignment, bold: true })],
+            }),
+            new Paragraph(draftContent.project_alignment || ''),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.use_of_funds, bold: true })],
+            }),
+            new Paragraph(draftContent.use_of_funds || ''),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.expected_impact, bold: true })],
+            }),
+            new Paragraph(draftContent.expected_impact || ''),
+
+            new Paragraph({
+              children: [new TextRun({ text: labels.closing_statement, bold: true })],
+            }),
+            new Paragraph(draftContent.closing_statement || ''),
+          ],
+        },
+      ],
+    })
+
+    const blob = await Packer.toBlob(doc)
+    saveAs(blob, `${getDraftFileBaseName()}.docx`)
+  }
+
+  async function handleCopyDraft() {
+    if (!draftContent) return
+
+    const labels =
+      draftLanguage === 'fr'
+        ? {
+            executive_summary: 'Résumé exécutif',
+            business_overview: "Présentation de l'entreprise",
+            project_alignment: 'Alignement du projet',
+            use_of_funds: 'Utilisation des fonds',
+            expected_impact: 'Impact attendu',
+            closing_statement: 'Conclusion',
+          }
+        : {
+            executive_summary: 'Executive Summary',
+            business_overview: 'Business Overview',
+            project_alignment: 'Project Alignment',
+            use_of_funds: 'Use of Funds',
+            expected_impact: 'Expected Impact',
+            closing_statement: 'Closing Statement',
+          }
+
+    const text = `
+${draftContent.title}
+
+${labels.executive_summary}
+${draftContent.executive_summary}
+
+${labels.business_overview}
+${draftContent.business_overview}
+
+${labels.project_alignment}
+${draftContent.project_alignment}
+
+${labels.use_of_funds}
+${draftContent.use_of_funds}
+
+${labels.expected_impact}
+${draftContent.expected_impact}
+
+${labels.closing_statement}
+${draftContent.closing_statement}
+`.trim()
+
+    try {
+      await navigator.clipboard.writeText(text)
+      alert(draftLanguage === 'fr' ? 'Brouillon copié dans le presse-papiers' : 'Draft copied to clipboard')
+    } catch (err) {
+      alert(draftLanguage === 'fr' ? 'Échec de la copie du brouillon' : 'Failed to copy draft')
+    }
+  }
+
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState error={error} />
+
+  const sectionLabels =
+    draftLanguage === 'fr'
+      ? {
+          draftGenerator: 'Générateur de brouillon de demande',
+          draftGeneratorSubtitle:
+            'Générez un brouillon professionnel basé sur votre profil et vos opportunités correspondantes.',
+          draftLanguage: 'Langue du brouillon',
+          generateDraft: 'Générer le brouillon',
+          applicationDraft: 'Brouillon de demande',
+          draftIntro:
+            "Ce brouillon est basé sur le profil de votre entreprise et l'opportunité de financement sélectionnée. Relisez-le et ajustez-le avant de le soumettre.",
+          generatingDraft: 'Génération du brouillon...',
+          executive_summary: 'Résumé exécutif',
+          business_overview: "Présentation de l'entreprise",
+          project_alignment: 'Alignement du projet',
+          use_of_funds: 'Utilisation des fonds',
+          expected_impact: 'Impact attendu',
+          closing_statement: 'Conclusion',
+          copyDraft: 'Copier le brouillon',
+          downloadWord: 'Télécharger Word',
+          downloadPdf: 'Télécharger PDF',
+          close: 'Fermer',
+        }
+      : {
+          draftGenerator: 'Application Draft Generator',
+          draftGeneratorSubtitle:
+            'Generate a professional application draft based on your profile and matched opportunities.',
+          draftLanguage: 'Draft language',
+          generateDraft: 'Generate Draft',
+          applicationDraft: 'Application Draft',
+          draftIntro:
+            'This draft is based on your business profile and the selected funding opportunity. Review and refine it before submitting.',
+          generatingDraft: 'Generating your draft...',
+          executive_summary: 'Executive Summary',
+          business_overview: 'Business Overview',
+          project_alignment: 'Project Alignment',
+          use_of_funds: 'Use of Funds',
+          expected_impact: 'Expected Impact',
+          closing_statement: 'Closing Statement',
+          copyDraft: 'Copy Draft',
+          downloadWord: 'Download Word',
+          downloadPdf: 'Download PDF',
+          close: 'Close',
+        }
 
   return (
     <div className="page">
       <div className="shell">
-        <div className="brandTop">GrantMatch NB</div>
+        <div className="brandTop">{t('common.brand')}</div>
 
         <div className="heroBlock">
-          <div className="heroBadge">✓ Results Ready</div>
-          <h1 className="heroTitle">Your Grant Matches</h1>
-          <p className="heroText">
-            Based on your quiz answers, here are the most relevant funding programs for your business.
-          </p>
+          <div className="heroBadge">{t('results.resultsReady')}</div>
+          <h1 className="heroTitle">{t('results.heroTitle')}</h1>
+          <p className="heroText">{t('results.heroText')}</p>
           <div className="heroNotice">
-            ✓ Your details have been saved. These recommendations are personalized for you.
+            {t('results.heroNotice', {
+              count: evaluatedProgramsCount,
+              visible: Math.min(FREE_VISIBLE_COUNT, matches.length),
+              suffix:
+                Math.min(FREE_VISIBLE_COUNT, matches.length) === 1
+                  ? ''
+                  : i18n.language.startsWith('fr')
+                  ? 's'
+                  : 'es',
+            })}
           </div>
         </div>
 
@@ -329,22 +854,19 @@ function ResultsContent() {
           <div className="panel">
             <div className="panelHeader">
               <div>
-                <h2 className="panelTitle">Your profile</h2>
-                <p className="panelSubtitle">
-                  This is the information used to calculate your funding matches.
-                </p>
+                <h2 className="panelTitle">{t('results.yourProfile')}</h2>
+                <p className="panelSubtitle">{t('results.yourProfileSubtitle')}</p>
               </div>
-
-              <div className="profileBadge">Personalized Match Profile</div>
+              <div className="profileBadge">{t('results.personalizedMatchProfile')}</div>
             </div>
 
             <div className="profileGrid">
               {[
-                ['Industry', profile.industry || '-'],
-                ['Stage', profile.stage || '-'],
-                ['Employees', profile.employees ?? '-'],
-                ['Does R&D', profile.does_rd ? 'Yes' : 'No'],
-                ['Goal', profile.goal || '-'],
+                [t('results.industry'), profile.industry || '-'],
+                [t('results.stage'), profile.stage || '-'],
+                [t('results.employees'), profile.employees ?? '-'],
+                [t('results.doesRd'), profile.does_rd ? t('common.yes') : t('common.no')],
+                [t('results.goal'), profile.goal || '-'],
               ].map(([label, value]) => (
                 <div key={String(label)} className="profileItem">
                   <div className="profileLabel">{label}</div>
@@ -355,93 +877,503 @@ function ResultsContent() {
           </div>
         )}
 
+        <div className="panel">
+          <div className="panelHeader">
+            <div>
+              <h2 className="panelTitle">{t('results.deadlineAlerts')}</h2>
+              <p className="panelSubtitle">{t('results.deadlineAlertsSubtitle')}</p>
+            </div>
+            <div className="profileBadge">{t('results.retentionFeature')}</div>
+          </div>
+
+          <div className="modalForm">
+  <div className="sectionCard">
+    <div className="sectionTitle">Saved Contact Details</div>
+    <div className="sectionBody">
+      <div><strong>Business:</strong> {profile?.business_name || '-'}</div>
+      <div><strong>Email:</strong> {(profile as { email?: string | null })?.email || '-'}</div>
+      <div><strong>Phone:</strong> {(profile as { phone?: string | null })?.phone || '-'}</div>
+    </div>
+  </div>
+
+  <textarea
+    placeholder={t('results.optionalNotes')}
+    value={requestNotes}
+    onChange={(e) => setRequestNotes(e.target.value)}
+    className="modalTextarea"
+    rows={4}
+  />
+
+  {requestError && <div className="modalError">{requestError}</div>}
+
+  <div className="modalActions">
+    <button
+      type="button"
+      className="secondaryModalBtn"
+      onClick={() => setShowRequestModal(false)}
+    >
+      {t('common.cancel')}
+    </button>
+
+    <button
+      type="button"
+      className="primaryModalBtn"
+      onClick={handleRequestFullReport}
+      disabled={requestLoading}
+    >
+      {requestLoading ? t('results.submitting') : t('results.submitRequest')}
+    </button>
+  </div>
+</div>
+        </div>
+
         {matches.length === 0 ? (
           <div className="panel">
-            <p className="emptyText">No grants are available in the database yet.</p>
+            <p className="emptyText">{t('results.noPrograms')}</p>
           </div>
         ) : (
-          <div className="resultsList">
-            {matches.map((grant, index) => {
-              const scoreMeta = getScoreMeta(grant.score)
+          <>
+            <div className="resultsList">
+             <div className="disclaimerBox">
+  {t('results.stackingDisclaimer')}
+</div>
 
-              return (
-                <div key={grant.id} className="grantCard">
-                  <div className="grantTop">
-                    <div className="grantTopLeft">
-                      <div className="grantBadges">
-                        {index === 0 && <span className="topMatchBadge">TOP MATCH</span>}
-                        <span className="typeBadge">{grant.type || 'Program'}</span>
+{fundingMixItems.length > 0 && (
+  <div className="fundingMixBox">
+    <div className="fundingMixTitle">{t('results.suggestedFundingMix')}</div>
+    <div className="fundingMixSubtext">
+      {t('results.suggestedFundingMixText')}
+    </div>
+
+    <div className="fundingMixGrid">
+      {fundingMixItems.map((item) => (
+        <div key={`${item.label}-${item.grant.id}`} className="fundingMixCard">
+          <div className="fundingMixCardLabel">
+            {item.label === 'Hiring Support'
+              ? t('results.fundingMixHiring')
+              : item.label === 'Equipment / Investment'
+              ? t('results.fundingMixEquipment')
+              : item.label === 'Innovation / R&D'
+              ? t('results.fundingMixInnovation')
+              : t('results.fundingMixGrowth')}
+          </div>
+          <div className="fundingMixCardName">{item.grant.name || t('common.unnamedProgram')}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+              {visibleMatches.map((grant, index) => {
+                const scoreMeta = getScoreMeta(grant.matchPercent, t)
+                console.log('LANG', i18n.language)
+console.log('GRANT NAME EN', grant.name)
+console.log('GRANT NAME FR', (grant as Grant & { name_fr?: string | null }).name_fr)
+console.log('GRANT DESC FR', (grant as Grant & { description_fr?: string | null }).description_fr)
+
+                return (
+                  <div key={grant.id} className="grantCard">
+                    <div className="grantTop">
+                      <div className="grantTopLeft">
+                        <div className="grantBadges">
+                          {index === 0 && (
+                            <span className="topMatchBadge">{t('results.topMatch')}</span>
+                          )}
+                         <span className="typeBadge">{formatFundingType(grant, t)}</span>
+                        </div>
+
+                        <h2 className="grantTitle">
+                          {getGrantName(grant, i18n.language)}
+                        </h2>
+                        <p className="grantOrg">
+                          {grant.organization || t('common.organizationNotSpecified')}
+                        </p>
                       </div>
 
-                      <h2 className="grantTitle">{grant.name}</h2>
-                      <p className="grantOrg">{grant.organization || 'Organization not specified'}</p>
+                      <div className={`scoreCard ${scoreMeta.className}`}>
+ <div className="scoreLabel">{scoreMeta.label}</div>
+  <div className="scoreValue">{grant.matchPercent ?? 0}%</div>
+</div>
                     </div>
 
-                    <div className={`scoreCard ${scoreMeta.className}`}>
-                      <div className="scoreLabel">{scoreMeta.label}</div>
-                      <div className="scoreValue">{grant.score}</div>
+                 <p className="grantDescription">
+  {getGrantDescription(grant, i18n.language)}
+</p>
+
+                    <div className="infoGrid">
+                      <div className="infoItem">
+                        <div className="infoLabel">{t('results.maximumAmount')}</div>
+                        <div className="infoValue">{formatAmount(grant.amount_max, t)}</div>
+                      </div>
+
+                      <div className="infoItem">
+                        <div className="infoLabel">{t('results.fundingType')}</div>
+                        <div className="infoValue">{formatFundingType(grant, t)}</div>
+                      </div>
+
+                      <div className="infoItem">
+                        <div className="infoLabel">{t('results.status')}</div>
+                        <div className="infoValue">
+                         {grant.intake_status === 'open'
+  ? t('results.statusOpen')
+  : grant.intake_status === 'rolling'
+  ? t('results.statusRolling')
+  : grant.intake_status === 'upcoming'
+  ? t('results.statusUpcoming')
+  : grant.intake_status || t('common.unknown')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="sectionCard">
+                      <div className="sectionTitle">{t('results.eligibility')}</div>
+                      <div className="sectionBody">{getGrantEligibility(grant, i18n.language)}</div>
+                    </div>
+
+                    {grant.reasons.length > 0 && (
+                      <div className="matchWhyCard">
+                        <div className="sectionTitle matchWhyTitle">
+                          {t('results.whyThisMatches')}
+                        </div>
+                        <ul className="reasonsList">
+                          {grant.reasons.map((reason, index2) => (
+                           <li key={index2}>{translateReason(reason, i18n.language)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="grantActions">
+                      {grant.url && (
+                        <a
+                          href={grant.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="grantButton"
+                        >
+                          {t('results.viewGrantDetails')}
+                        </a>
+                      )}
                     </div>
                   </div>
+                )
+              })}
+            </div>
 
-                  <p className="grantDescription">
-                    {grant.description || 'No description available.'}
+            {showPremiumSection && (
+              <>
+                <div className="paywallCard">
+                  <div className="paywallBadge">{t('results.premiumReport')}</div>
+                  <h2 className="paywallTitle">{t('results.unlockTitle')}</h2>
+                  <p className="paywallText">
+                    {t('results.unlockText', {
+                      count: matches.length,
+                      suffix:
+                        matches.length === 1
+                          ? ''
+                          : i18n.language.startsWith('fr')
+                          ? 's'
+                          : 's',
+                      visible: Math.min(FREE_VISIBLE_COUNT, matches.length),
+                      remaining: Math.max(matches.length - FREE_VISIBLE_COUNT, 0),
+                    })}
                   </p>
 
-                  <div className="infoGrid">
-                    <div className="infoItem">
-                      <div className="infoLabel">Maximum Amount</div>
-                      <div className="infoValue">{formatAmount(grant.amount_max)}</div>
-                    </div>
-
-                    <div className="infoItem">
-                      <div className="infoLabel">Repayable</div>
-                      <div className="infoValue">{grant.repayable ? 'Yes' : 'No'}</div>
-                    </div>
-
-                    <div className="infoItem">
-                      <div className="infoLabel">Status</div>
-                      <div className="infoValue">{grant.intake_status || 'Unknown'}</div>
-                    </div>
+                  <div className="paywallFeatures">
+                    <div className="payFeature">{t('results.payFeature1')}</div>
+                    <div className="payFeature">{t('results.payFeature2')}</div>
+                    <div className="payFeature">{t('results.payFeature3')}</div>
+                    <div className="payFeature">{t('results.payFeature4')}</div>
+                    <div className="payFeature">{t('results.payFeature5')}</div>
+                    <div className="payFeature">{t('results.payFeature6')}</div>
+                    <div className="payFeature">{t('results.payFeature7')}</div>
+                    <div className="payFeature">{t('results.payFeature8')}</div>
+                    <div className="payFeature">{t('results.payFeature9')}</div>
                   </div>
 
-                  <div className="sectionCard">
-                    <div className="sectionTitle">Eligibility</div>
-                    <div className="sectionBody">{grant.eligibility || 'Not specified'}</div>
-                  </div>
+                  <div className="paywallTrust">{t('results.paywallTrust')}</div>
 
-                  {grant.reasons.length > 0 ? (
-                    <div className="matchWhyCard">
-                      <div className="sectionTitle matchWhyTitle">Why this matches</div>
-                      <ul className="reasonsList">
-                        {grant.reasons.map((reason, index2) => (
-                          <li key={index2}>{reason}</li>
-                        ))}
-                      </ul>
+                  <div className="priceRow">
+                    <div>
+                      <div className="priceLabel">{t('results.premiumAccess')}</div>
+                      <div className="priceValue">{t('results.requestFullReport')}</div>
+                      <div className="priceNote">{t('results.nextSteps')}</div>
                     </div>
-                  ) : (
-                    <div className="sectionCard mutedSection">
-                      Low match based on your current profile, but this program may still be worth reviewing.
-                    </div>
-                  )}
 
-                  {grant.url && (
-                    <a
-                      href={grant.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="grantButton"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestSuccess(false)
+                        setRequestError(null)
+                        setShowRequestModal(true)
+                      }}
+                      className="unlockButton"
                     >
-                      View Grant Details →
-                    </a>
-                  )}
+                      {t('results.requestFullReportButton')}
+                    </button>
+                  </div>
                 </div>
-              )
-            })}
+
+                <div className="lockedPreviewSingle">
+                  <div className="lockedTitle">{t('results.moreOpportunities')}</div>
+                  <div className="lockedText">
+                    {t('results.moreOpportunitiesText', {
+                      visible: Math.min(FREE_VISIBLE_COUNT, matches.length),
+                      remaining: Math.max(matches.length - FREE_VISIBLE_COUNT, 0),
+                      suffix:
+                        Math.min(FREE_VISIBLE_COUNT, matches.length) === 1
+                          ? ''
+                          : i18n.language.startsWith('fr')
+                          ? 's'
+                          : 'es',
+                      opSuffix:
+                        Math.max(matches.length - FREE_VISIBLE_COUNT, 0) === 1 ? '' : 's',
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {premiumChecked && hasPremiumAccess && matches.length > 0 && (
+          <div className="panel" id="draft-generator">
+            <div className="panelHeader">
+              <div>
+                <h2 className="panelTitle">{sectionLabels.draftGenerator}</h2>
+                <p className="panelSubtitle">{sectionLabels.draftGeneratorSubtitle}</p>
+
+                <div className="draftLanguageRow">
+                  <label className="draftLanguageLabel">{sectionLabels.draftLanguage}</label>
+                  <select
+                    value={draftLanguage}
+                    onChange={(e) => setDraftLanguage(e.target.value as 'en' | 'fr')}
+                    className="modalInput draftLanguageSelect"
+                  >
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="profileBadge">{t('results.premiumFeature')}</div>
+            </div>
+
+            <div className="resultsList">
+              {matches.map((grant) => {
+                const scoreMeta = getScoreMeta(grant.matchPercent ?? 0, t)
+
+                return (
+                  <div key={`draft-${grant.id}`} className="grantCard">
+                    <div className="grantTop">
+                      <div className="grantTopLeft">
+                        <h2 className="grantTitle">
+                         {getGrantName(grant, i18n.language)}
+                        </h2>
+
+                        <p className="grantOrg">
+                          {grant.organization || t('common.organizationNotSpecified')}
+                        </p>
+                      </div>
+
+                      <div className={`scoreCard ${scoreMeta.className}`}>
+  <div className="scoreLabel">{scoreMeta.label}</div>
+  <div className="scoreValue">{grant.matchPercent ?? 0}%</div>
+</div>
+                    </div>
+
+                    <p className="grantDescription">{getGrantDescription(grant, i18n.language)}</p>
+
+                    <div className="grantActions">
+                      <button
+                        type="button"
+                        className="secondaryActionBtn"
+                        onClick={() => handleGenerateDraft(grant)}
+                      >
+                        {sectionLabels.generateDraft}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      <style>{baseStyles}</style>
+      {showRequestModal && (
+        <div className="modalBackdrop" onClick={() => setShowRequestModal(false)}>
+          <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+            {!requestSuccess ? (
+              <>
+                <h3 className="modalTitle">{t('results.requestModalTitle')}</h3>
+               <p className="modalText">
+  This request will be processed based on your profile and available funding programs.  
+  You can add an optional note below if needed.
+</p>
+<p className="modalSubText">
+  Results are generated automatically and may require verification with the funding provider.
+</p>
+
+                <div className="modalForm">
+  <div className="sectionCard">
+    <div className="sectionTitle">Saved Contact Details</div>
+    <div className="sectionBody">
+      <div><strong>Business:</strong> {profile?.business_name || '-'}</div>
+      <div><strong>Email:</strong> {(profile as { email?: string | null })?.email || '-'}</div>
+      <div><strong>Phone:</strong> {(profile as { phone?: string | null })?.phone || '-'}</div>
+    </div>
+  </div>
+
+  <textarea
+    placeholder={t('results.optionalNotes')}
+    value={requestNotes}
+    onChange={(e) => setRequestNotes(e.target.value)}
+    className="modalTextarea"
+    rows={4}
+  />
+
+  {requestError && <div className="modalError">{requestError}</div>}
+
+  <div className="modalActions">
+    <button
+      type="button"
+      className="secondaryModalBtn"
+      onClick={() => setShowRequestModal(false)}
+    >
+      {t('common.cancel')}
+    </button>
+
+    <button
+      type="button"
+      className="primaryModalBtn"
+      onClick={handleRequestFullReport}
+      disabled={requestLoading}
+    >
+      {requestLoading ? t('results.submitting') : t('results.submitRequest')}
+    </button>
+  </div>
+</div>
+              </>
+            ) : (
+              <>
+                <h3 className="modalTitle">{t('results.requestSubmitted')}</h3>
+                <p className="modalText">{t('results.requestSubmittedText')}</p>
+
+                <div className="modalActions single">
+                  <button
+                    type="button"
+                    className="primaryModalBtn"
+                    onClick={() => setShowRequestModal(false)}
+                  >
+                    {t('common.close')}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDraftModal && (
+        <div className="modalBackdrop" onClick={() => setShowDraftModal(false)}>
+          <div className="modalCard draftModalCard" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modalTitle">
+             {selectedDraftGrant
+  ? `${sectionLabels.applicationDraft} — ${getGrantName(selectedDraftGrant, i18n.language)}`
+  : sectionLabels.applicationDraft}
+            </h3>
+
+            <p className="modalText">{sectionLabels.draftIntro}</p>
+
+            {draftLoading && (
+              <div className="panel">
+                <div className="panelSubtitle">{sectionLabels.generatingDraft}</div>
+              </div>
+            )}
+
+            {draftError && <div className="modalError">{draftError}</div>}
+
+            {draftContent && (
+              <div className="draftContent">
+                <div className="sectionCard">
+                  <div className="sectionTitle">{draftContent.title}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.executive_summary}</div>
+                  <div className="sectionBody">{draftContent.executive_summary}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.business_overview}</div>
+                  <div className="sectionBody">{draftContent.business_overview}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.project_alignment}</div>
+                  <div className="sectionBody">{draftContent.project_alignment}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.use_of_funds}</div>
+                  <div className="sectionBody">{draftContent.use_of_funds}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.expected_impact}</div>
+                  <div className="sectionBody">{draftContent.expected_impact}</div>
+                </div>
+
+                <div className="sectionCard">
+                  <div className="sectionTitle">{sectionLabels.closing_statement}</div>
+                  <div className="sectionBody">{draftContent.closing_statement}</div>
+                </div>
+              </div>
+            )}
+
+            <div className="modalActions">
+              {draftContent && (
+                <>
+                  <button
+                    type="button"
+                    className="secondaryModalBtn"
+                    onClick={handleCopyDraft}
+                  >
+                    {sectionLabels.copyDraft}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondaryModalBtn"
+                    onClick={handleDownloadDraftWord}
+                  >
+                    {sectionLabels.downloadWord}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondaryModalBtn"
+                    onClick={handleDownloadDraftPdf}
+                  >
+                    {sectionLabels.downloadPdf}
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                className="primaryModalBtn"
+                onClick={() => setShowDraftModal(false)}
+              >
+                {sectionLabels.close}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{styles}</style>
     </div>
   )
 }
@@ -454,7 +1386,36 @@ export default function ResultsPage() {
   )
 }
 
-const baseStyles = `
+const styles = `
+  .draftModalCard {
+    max-width: 820px;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+
+  .draftContent {
+    display: grid;
+    gap: 12px;
+  }
+
+  .draftLanguageRow {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .draftLanguageLabel {
+    font-size: 14px;
+    color: rgba(255,255,255,0.72);
+    font-weight: 600;
+  }
+
+  .draftLanguageSelect {
+    max-width: 220px;
+  }
+
   .page {
     min-height: 100vh;
     background: #0d1f3c;
@@ -640,6 +1601,54 @@ const baseStyles = `
     color: white;
   }
 
+  .stackSummary {
+    background: rgba(2,195,154,0.08);
+    border: 1px solid rgba(2,195,154,0.18);
+    border-radius: 18px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+
+  .stackAmountLabel {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .stackAmountValue {
+    font-size: 30px;
+    font-weight: 800;
+    color: #9ff7df;
+  }
+
+  .stackPrograms {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin-bottom: 16px;
+  }
+
+  .stackProgramCard {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .stackProgramName {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .stackProgramMeta {
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+  }
+
   .resultsList {
     display: grid;
     gap: 18px;
@@ -727,7 +1736,7 @@ const baseStyles = `
     background: linear-gradient(90deg, #2563eb, #1d4ed8);
   }
 
-  .scoreCard.possible {
+  .scoreCard.weak {
     background: rgba(255,255,255,0.14);
   }
 
@@ -783,12 +1792,6 @@ const baseStyles = `
     margin-bottom: 16px;
   }
 
-  .mutedSection {
-    color: rgba(255,255,255,0.62);
-    line-height: 1.65;
-    font-size: 15px;
-  }
-
   .sectionTitle {
     font-size: 15px;
     font-weight: 800;
@@ -840,10 +1843,260 @@ const baseStyles = `
     max-width: 100%;
   }
 
+  .paywallCard {
+    margin-top: 18px;
+    background: linear-gradient(180deg, rgba(2,195,154,0.12), rgba(2,128,144,0.08));
+    border: 1px solid rgba(2,195,154,0.22);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.2);
+  }
+
+  .paywallBadge {
+    display: inline-block;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    color: #9ff7df;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  .paywallTitle {
+    margin: 0 0 10px;
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .paywallText {
+    margin: 0 0 16px;
+    color: rgba(255,255,255,0.78);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .paywallFeatures {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .payFeature {
+    color: rgba(255,255,255,0.92);
+    font-size: 15px;
+  }
+
+  .paywallTrust {
+    margin-top: 10px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+  }
+
+  .priceRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .priceLabel {
+    font-size: 13px;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 4px;
+  }
+
+  .priceValue {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .priceNote {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    margin-top: 4px;
+  }
+
+  .unlockButton {
+    border: none;
+    cursor: pointer;
+    padding: 14px 20px;
+    border-radius: 14px;
+    background: white;
+    color: #062344;
+    font-size: 15px;
+    font-weight: 800;
+    min-height: 48px;
+  }
+
+  .lockedPreviewSingle {
+    margin-top: 18px;
+    padding: 28px 20px;
+    border-radius: 22px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    text-align: center;
+  }
+
+  .lockedTitle {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .lockedText {
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.72);
+  }
+
   .emptyText {
     margin: 0;
     color: rgba(255,255,255,0.68);
     font-size: 15px;
+  }
+
+  .modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+  }
+
+  .modalCard {
+    width: 100%;
+    max-width: 560px;
+    background: #10284c;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    padding: 22px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+
+  .modalTitle {
+    margin: 0 0 10px;
+    font-size: 28px;
+    font-weight: 800;
+  }
+
+  .modalText {
+    margin: 0 0 18px;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  .modalForm {
+    display: grid;
+    gap: 12px;
+  }
+
+  .modalInput,
+  .modalTextarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: white;
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 15px;
+    outline: none;
+  }
+
+  .modalTextarea {
+    resize: vertical;
+    min-height: 110px;
+  }
+
+  .modalError {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    color: #fecaca;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .modalSuccess {
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.35);
+    color: #bbf7d0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .modalActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .modalActions.single {
+    justify-content: center;
+  }
+
+  .primaryModalBtn,
+  .secondaryModalBtn {
+    min-height: 46px;
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    border: none;
+  }
+
+  .primaryModalBtn {
+    background: linear-gradient(90deg, #028090, #02c39a);
+    color: white;
+  }
+
+  .secondaryModalBtn {
+    background: rgba(255,255,255,0.08);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .grantActions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .secondaryActionBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.08);
+    color: white;
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .secondaryActionBtn:hover {
+    background: rgba(255,255,255,0.18);
+    transform: translateY(-1px);
   }
 
   @keyframes spin {
@@ -863,25 +2116,72 @@ const baseStyles = `
 
     .panel,
     .grantCard,
-    .errorCard {
+    .errorCard,
+    .paywallCard,
+    .modalCard {
       padding: 18px 16px;
       border-radius: 18px;
     }
 
-    .scoreCard {
+    .scoreCard,
+    .unlockButton,
+    .grantButton,
+    .primaryModalBtn,
+    .secondaryModalBtn,
+    .secondaryActionBtn {
       width: 100%;
       min-width: 0;
-    }
-
-    .grantButton {
-      width: 100%;
     }
 
     .heroText,
     .grantDescription,
     .sectionBody,
-    .mutedSection {
+    .paywallText,
+    .modalText {
       font-size: 14px;
     }
+
+    .priceRow,
+    .modalActions {
+      align-items: stretch;
+    }
+
+    .modalTitle {
+      font-size: 24px;
+    }
+      .disclaimerBox {
+  max-width: 820px;
+  margin: 0 auto 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 193, 7, 0.12);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  color: #fde68a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fundingMixBox {
+  max-width: 820px;
+  margin: 0 auto 20px;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(2, 195, 154, 0.08);
+  border: 1px solid rgba(2, 195, 154, 0.25);
+}
+
+.fundingMixTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #02c39a;
+  margin-bottom: 8px;
+}
+
+.fundingMixList {
+  padding-left: 18px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.6;
+}
   }
 `

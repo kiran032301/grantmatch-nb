@@ -1,59 +1,62 @@
+'use client'
+
 import Link from 'next/link'
-
-const stats = [
-  { number: '128', label: 'NB funding programs tracked' },
-  { number: '$80K', label: 'Average top match value' },
-  { number: '5 min', label: 'To see your matches' },
-]
-
-const steps = [
-  {
-    step: '01',
-    title: 'Answer 5 questions',
-    body: 'Tell us about your business — industry, stage, goals. Takes under 5 minutes.',
-  },
-  {
-    step: '02',
-    title: 'AI finds your matches',
-    body: 'We scan 128 NB funding programs and rank every one you qualify for.',
-  },
-  {
-    step: '03',
-    title: 'Apply with confidence',
-    body: 'See exactly why you match, how much you can get, and apply directly.',
-  },
-]
+import { useTranslation } from 'react-i18next'
+import '@/lib/i18n'
 
 export default function Home() {
+  const { t } = useTranslation()
+
+  const stats = [
+    { number: '128', label: t('home.stats1Label') },
+    { number: '$80K', label: t('home.stats2Label') },
+    { number: '5 min', label: t('home.stats3Label') },
+  ]
+
+  const steps = [
+    {
+      step: '01',
+      title: t('home.step1Title'),
+      body: t('home.step1Body'),
+    },
+    {
+      step: '02',
+      title: t('home.step2Title'),
+      body: t('home.step2Body'),
+    },
+    {
+      step: '03',
+      title: t('home.step3Title'),
+      body: t('home.step3Body'),
+    },
+  ]
+
   return (
     <main className="page">
       <nav className="nav">
-        <div className="brand">GrantMatch NB</div>
+        <div className="brand">{t('common.brand')}</div>
 
         <div className="navActions">
           <Link href="/quiz" className="navButton">
-            Find My Grants
+            {t('home.navButton')}
           </Link>
         </div>
       </nav>
 
       <section className="hero">
-        <div className="pill">Built for New Brunswick Businesses • Bilingue EN/FR</div>
+        <div className="pill">{t('home.pill')}</div>
 
         <h1 className="heroTitle">
-          Stop leaving NB funding <span>on the table.</span>
+          {t('home.heroTitle1')} <span>{t('home.heroTitle2')}</span>
         </h1>
 
-        <p className="heroText">
-          128 government grants, loans and tax credits — matched to your NB business
-          in 5 minutes. In English or French.
-        </p>
+        <p className="heroText">{t('home.heroText')}</p>
 
         <Link href="/quiz" className="heroButton">
-          Find My Grants — Free →
+          {t('home.heroButton')}
         </Link>
 
-        <p className="subText">No credit card required • Takes 5 minutes</p>
+        <p className="subText">{t('home.subText')}</p>
       </section>
 
       <section className="statsSection">
@@ -66,7 +69,7 @@ export default function Home() {
       </section>
 
       <section className="howSection">
-        <h2 className="sectionTitle">How it works</h2>
+        <h2 className="sectionTitle">{t('home.howItWorks')}</h2>
 
         <div className="stepsGrid">
           {steps.map((item) => (
@@ -79,9 +82,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="footer">
-        Built in Fredericton, New Brunswick • For every NB business, in English and French
-      </footer>
+      <footer className="footer">{t('home.footer')}</footer>
 
       <style>{`
         .page {

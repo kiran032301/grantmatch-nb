@@ -2,73 +2,114 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslation } from 'react-i18next'
+import '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 
 const STEPS = [
   {
     id: 'industry',
-    question: 'What industry is your business in?',
-    subtitle: 'Choose the one that best describes your main activity',
+    questionKey: 'quiz.industry_question',
+    subtitleKey: 'quiz.industry_subtitle',
     options: [
-      'Technology / Software',
-      'Manufacturing',
-      'Agriculture / Agritech',
-      'Health & Life Sciences',
-      'Clean Energy / Cleantech',
-      'Retail / Hospitality',
-      'Professional Services',
-      'Other',
+      { value: 'Technology / Software', labelKey: 'quiz.industry_opt_1' },
+      { value: 'Clean Energy / Cleantech', labelKey: 'quiz.industry_opt_2' },
+      { value: 'Manufacturing', labelKey: 'quiz.industry_opt_3' },
+      { value: 'Agriculture / Food', labelKey: 'quiz.industry_opt_4' },
+      { value: 'Health & Life Sciences', labelKey: 'quiz.industry_opt_5' },
+      { value: 'Retail / Hospitality', labelKey: 'quiz.industry_opt_6' },
+      { value: 'Professional Services', labelKey: 'quiz.industry_opt_7' },
+      { value: 'Construction', labelKey: 'quiz.industry_opt_8' },
+      { value: 'Media / Creative', labelKey: 'quiz.industry_opt_9' },
+      { value: 'Arts, Culture & Creative Industries', labelKey: 'quiz.industry_opt_11' },
+      { value: 'Other', labelKey: 'quiz.industry_opt_10' },
     ],
   },
   {
     id: 'stage',
-    question: 'What stage is your business at?',
-    subtitle: 'This helps us find stage-appropriate funding',
+    questionKey: 'quiz.stage_question',
+    subtitleKey: 'quiz.stage_subtitle',
     options: [
-      'Idea / Pre-revenue',
-      'Early stage (under $100K revenue)',
-      'Growth stage ($100K–$1M revenue)',
-      'Established ($1M+ revenue)',
+      { value: 'Idea / Pre-revenue', labelKey: 'quiz.stage_opt_1' },
+      { value: 'Startup', labelKey: 'quiz.stage_opt_2' },
+      { value: 'Growth', labelKey: 'quiz.stage_opt_3' },
+      { value: 'Established', labelKey: 'quiz.stage_opt_4' },
     ],
   },
   {
     id: 'employees',
-    question: 'How many employees do you have?',
-    subtitle: 'Including yourself and any part-time staff',
+    questionKey: 'quiz.employees_question',
+    subtitleKey: 'quiz.employees_subtitle',
     options: [
-      'Just me (1)',
-      '2–4 employees',
-      '5–15 employees',
-      '16–50 employees',
-      '50+ employees',
+      { value: 'Just me (1)', labelKey: 'quiz.employees_opt_1' },
+      { value: '2–4 employees', labelKey: 'quiz.employees_opt_2' },
+      { value: '5–15 employees', labelKey: 'quiz.employees_opt_3' },
+      { value: '16–50 employees', labelKey: 'quiz.employees_opt_4' },
+      { value: '50+ employees', labelKey: 'quiz.employees_opt_5' },
     ],
   },
   {
     id: 'does_rd',
-    question: 'Does your business do any research or development?',
-    subtitle: 'R&D includes building new products, software, or processes',
+    questionKey: 'quiz.does_rd_question',
+    subtitleKey: 'quiz.does_rd_subtitle',
     options: [
-      'Yes — we develop new products or technology',
-      'Somewhat — some experimental work',
-      'No — we deliver services or sell existing products',
+      {
+        value: 'Yes — strong R&D / innovation focus',
+        labelKey: 'quiz.does_rd_opt_1',
+      },
+      {
+        value: 'Some — occasional innovation work',
+        labelKey: 'quiz.does_rd_opt_2',
+      },
+      {
+        value: 'No — mainly operations or services',
+        labelKey: 'quiz.does_rd_opt_3',
+      },
     ],
   },
   {
     id: 'goal',
-    question: 'What do you need funding for right now?',
-    subtitle: 'Pick your most important need today',
+    questionKey: 'quiz.goal_question',
+    subtitleKey: 'quiz.goal_subtitle',
     options: [
-      'Hiring staff',
-      'R&D / product development',
-      'Export / entering new markets',
-      'Equipment or capital investment',
-      'Training employees',
-      'General growth',
+      { value: 'Hiring staff', labelKey: 'quiz.goal_opt_1' },
+      { value: 'Product development / innovation', labelKey: 'quiz.goal_opt_2' },
+      { value: 'R&D / commercialization', labelKey: 'quiz.goal_opt_3' },
+      { value: 'Export / new markets', labelKey: 'quiz.goal_opt_4' },
+      { value: 'Equipment / capital investment', labelKey: 'quiz.goal_opt_5' },
+      { value: 'Digital adoption / automation', labelKey: 'quiz.goal_opt_6' },
+      { value: 'Training employees', labelKey: 'quiz.goal_opt_7' },
+      { value: 'Sustainability / energy efficiency', labelKey: 'quiz.goal_opt_8' },
+      { value: 'General business growth', labelKey: 'quiz.goal_opt_9' },
+    ],
+  },
+  {
+    id: 'funding_need_type',
+    questionKey: 'quiz.funding_need_type_question',
+    subtitleKey: 'quiz.funding_need_type_subtitle',
+    options: [
+      { value: 'Grant', labelKey: 'quiz.funding_need_type_opt_1' },
+      { value: 'Loan', labelKey: 'quiz.funding_need_type_opt_2' },
+      { value: 'Investment', labelKey: 'quiz.funding_need_type_opt_3' },
+      { value: 'Tax Credit', labelKey: 'quiz.funding_need_type_opt_4' },
+      { value: 'Not sure', labelKey: 'quiz.funding_need_type_opt_5' },
+    ],
+  },
+  {
+    id: 'ownership_type',
+    questionKey: 'quiz.ownership_type_question',
+    subtitleKey: 'quiz.ownership_type_subtitle',
+    options: [
+      { value: 'Women-led', labelKey: 'quiz.ownership_type_opt_1' },
+      { value: 'Indigenous-led', labelKey: 'quiz.ownership_type_opt_2' },
+      { value: 'Youth-led', labelKey: 'quiz.ownership_type_opt_3' },
+      { value: 'General', labelKey: 'quiz.ownership_type_opt_4' },
     ],
   },
 ]
 
 export default function QuizPage() {
+  const { t } = useTranslation()
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<string | null>(null)
@@ -81,9 +122,9 @@ export default function QuizPage() {
 
   async function saveProfile(data: Record<string, string>) {
     const doesRdValue =
-      data.does_rd === 'Yes — we develop new products or technology'
+      data.does_rd === 'Yes — strong R&D / innovation focus'
         ? true
-        : data.does_rd === 'Somewhat — some experimental work'
+        : data.does_rd === 'Some — occasional innovation work'
         ? true
         : false
 
@@ -110,6 +151,8 @@ export default function QuizPage() {
           employees: employeesValue,
           does_rd: doesRdValue,
           goal: data.goal ?? null,
+          funding_need_type: data.funding_need_type ?? null,
+          ownership_type: data.ownership_type ?? null,
         },
       ])
       .select()
@@ -151,10 +194,10 @@ export default function QuizPage() {
           return
         }
 
-        setErrorMessage('Could not save your profile. Please try again.')
+        setErrorMessage(t('quiz.saveError'))
       } catch (error) {
         console.error('Unexpected quiz save error:', error)
-        setErrorMessage('Something went wrong while saving your answers.')
+        setErrorMessage(t('quiz.unexpectedError'))
       } finally {
         setIsSaving(false)
       }
@@ -171,23 +214,25 @@ export default function QuizPage() {
   return (
     <main className="page">
       <div className="topBrand">
-        <span className="brand">GrantMatch NB</span>
+        <span className="brand">{t('common.brand')}</span>
       </div>
 
       <div className="container">
         <div className="progressWrap">
           <div className="progressHeader">
             <span className="mutedText">
-              Question {step + 1} of {STEPS.length}
+              {t('quiz.questionCounter', {
+                current: step + 1,
+                total: STEPS.length,
+              })}
             </span>
-            <span className="progressText">{Math.round(progress)}% complete</span>
+            <span className="progressText">
+              {t('quiz.progressComplete', { value: Math.round(progress) })}
+            </span>
           </div>
 
           <div className="progressBarTrack">
-            <div
-              className="progressBarFill"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="progressBarFill" style={{ width: `${progress}%` }} />
           </div>
 
           <div className="dotsRow">
@@ -201,27 +246,29 @@ export default function QuizPage() {
         </div>
 
         <div className="questionCard">
-          <div className="questionBadge">NB Funding Match Quiz</div>
+          <div className="questionBadge">{t('quiz.badge')}</div>
 
-          <h1 className="questionTitle">{current.question}</h1>
+          <h1 className="questionTitle">{t(current.questionKey)}</h1>
 
-          <p className="questionSubtitle">{current.subtitle}</p>
+          <p className="questionSubtitle">{t(current.subtitleKey)}</p>
         </div>
 
         <div className="optionsList">
           {current.options.map((opt) => {
-            const isSelected = selected === opt
+            const isSelected = selected === opt.value
 
             return (
               <button
-                key={opt}
+                key={opt.value}
                 type="button"
-                onClick={() => selectOption(opt)}
+                onClick={() => selectOption(opt.value)}
                 disabled={isSaving}
                 className={`optionButton ${isSelected ? 'selected' : ''}`}
               >
-                <span className="optionText">{opt}</span>
-                <span className={`optionCheck ${isSelected ? 'visible' : ''}`}>✓</span>
+                <span className="optionText">{t(opt.labelKey)}</span>
+                <span className={`optionCheck ${isSelected ? 'visible' : ''}`}>
+                  ✓
+                </span>
               </button>
             )
           })}
@@ -229,23 +276,22 @@ export default function QuizPage() {
 
         {errorMessage && <div className="errorBox">{errorMessage}</div>}
 
-        {isSaving && (
-          <div className="savingText">
-            Saving your answers and preparing your personalized matches...
-          </div>
-        )}
+        {isSaving && <div className="savingText">{t('quiz.savingAnswers')}</div>}
 
         <div className="footerActions">
           {step > 0 && !isSaving ? (
             <button type="button" onClick={goBack} className="backButton">
-              ← Back to previous question
+              {t('quiz.back')}
             </button>
           ) : (
             <div />
           )}
 
           <div className="stepIndicator">
-            Step {step + 1} / {STEPS.length}
+            {t('quiz.stepIndicator', {
+              current: step + 1,
+              total: STEPS.length,
+            })}
           </div>
         </div>
       </div>

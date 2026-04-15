@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import ImportGrants from './ImportGrants'
+import { useTranslation } from 'react-i18next'
+import '@/lib/i18n'
+import ExtractGrantCard from './ExtractGrantCard'
+import ExtractProgramUrlsCard from './ExtractProgramUrlsCard'
 
 type UserProfile = {
   id: string
@@ -41,6 +45,25 @@ type Lead = {
   phone: string | null
   notes: string | null
   created_at?: string | null
+}
+
+type ReportRequest = {
+  id: number
+  profile_id: string
+  business_name: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  status: string | null
+  created_at?: string | null
+}
+
+type AdminApiResponse = {
+  profiles?: UserProfile[]
+  matches?: ProfileMatch[]
+  grants?: Grant[]
+  leads?: Lead[]
+  reportRequests?: ReportRequest[]
 }
 
 function formatDate(value?: string | null) {
@@ -141,8 +164,11 @@ export default function AdminPage() {
   const [matches, setMatches] = useState<ProfileMatch[]>([])
   const [grants, setGrants] = useState<Grant[]>([])
   const [leads, setLeads] = useState<Lead[]>([])
+  const [reportRequests, setReportRequests] = useState<ReportRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [unlockingId, setUnlockingId] = useState<string | null>(null)
 
   const [leadSearch, setLeadSearch] = useState('')
   const [leadFromDate, setLeadFromDate] = useState('')
@@ -152,50 +178,99 @@ export default function AdminPage() {
   const [matchFromDate, setMatchFromDate] = useState('')
   const [matchToDate, setMatchToDate] = useState('')
 
-  useEffect(() => {
-    async function loadAdminData() {
-      try {
-        const [profilesRes, matchesRes, grantsRes, leadsRes] = await Promise.all([
-          supabase.from('user_profiles').select('*').order('created_at', { ascending: false }),
-          supabase.from('profile_matches').select('*').order('created_at', { ascending: false }),
-          supabase.from('grants').select('id, name, organization, type, intake_status').order('name', { ascending: true }),
-          supabase.from('leads').select('*').order('created_at', { ascending: false }),
-        ])
+  const [requestSearch, setRequestSearch] = useState('')
+  const [requestFromDate, setRequestFromDate] = useState('')
+  const [requestToDate, setRequestToDate] = useState('')
 
-        if (profilesRes.error) {
-          console.error('Profiles load error:', profilesRes.error)
-          throw new Error('Could not load profiles')
-        }
+  const { t } = useTranslation()
 
-        if (matchesRes.error) {
-          console.error('Matches load error:', matchesRes.error)
-          throw new Error('Could not load matches')
-        }
-
-        if (grantsRes.error) {
-          console.error('Grants load error:', grantsRes.error)
-          throw new Error('Could not load grants')
-        }
-
-        if (leadsRes.error) {
-          console.error('Leads load error:', leadsRes.error)
-          throw new Error('Could not load leads')
-        }
-
-        setProfiles((profilesRes.data as UserProfile[]) || [])
-        setMatches((matchesRes.data as ProfileMatch[]) || [])
-        setGrants((grantsRes.data as Grant[]) || [])
-        setLeads((leadsRes.data as Lead[]) || [])
-      } catch (err) {
-        console.error('Admin page error:', err)
-        setError('Something went wrong while loading admin insights.')
-      } finally {
-        setLoading(false)
+  async function loadAdminData(showFullScreen = false) {
+    try {
+      if (showFullScreen) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
       }
-    }
 
-    loadAdminData()
+      setError(null)
+
+      const res = await fetch('/api/admin/import-grants', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+
+      const json: AdminApiResponse & { error?: string } = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json?.error || 'Failed to load admin data')
+      }
+
+      setProfiles(json.profiles || [])
+      setMatches(json.matches || [])
+      setGrants(json.grants || [])
+      setLeads(json.leads || [])
+      setReportRequests(json.reportRequests || [])
+    } catch (err) {
+      console.error('Admin page error:', err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while loading admin insights.'
+      )
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAdminData(true)
   }, [])
+
+  async function handleUnlockPremium(profileId: string, requestId?: string | number) {
+    try {
+      if (!profileId) {
+        alert('Missing profile ID')
+        return
+      }
+
+      setUnlockingId(String(requestId || profileId))
+
+      const res = await fetch('/api/admin/unlock-premium', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profileId,
+          requestId,
+          unlockedBy: 'admin',
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        alert(json?.error || 'Could not unlock premium')
+        return
+      }
+
+      alert('Premium unlocked successfully')
+      await loadAdminData(false)
+    } catch (error) {
+      alert('Something went wrong while unlocking premium')
+    } finally {
+      setUnlockingId(null)
+    }
+  }
+
+  async function handleAdminLogout() {
+  try {
+    await fetch('/api/admin/logout', { method: 'POST' })
+    window.location.href = '/admin/login'
+  } catch (error) {
+    console.error('Admin logout failed:', error)
+    window.location.href = '/admin/login'
+  }
+}
 
   const profileMap = useMemo(
     () => new Map(profiles.map((profile) => [profile.id, profile])),
@@ -221,6 +296,13 @@ export default function AdminPage() {
       grant: grantMap.get(match.grant_id) || null,
     }))
   }, [matches, profileMap, grantMap])
+
+  const requestsWithProfile = useMemo(() => {
+    return reportRequests.map((request) => ({
+      ...request,
+      profile: profileMap.get(request.profile_id) || null,
+    }))
+  }, [reportRequests, profileMap])
 
   const filteredLeads = useMemo(() => {
     const searchText = leadSearch.trim().toLowerCase()
@@ -286,9 +368,58 @@ export default function AdminPage() {
     })
   }, [matchesWithDetails, matchSearch, matchFromDate, matchToDate])
 
+  const filteredRequests = useMemo(() => {
+    const searchText = requestSearch.trim().toLowerCase()
+
+    return requestsWithProfile.filter((request) => {
+      const createdDate = request.created_at ? new Date(request.created_at) : null
+      const createdDay =
+        createdDate && !Number.isNaN(createdDate.getTime())
+          ? createdDate.toISOString().slice(0, 10)
+          : ''
+
+      if (requestFromDate && createdDay && createdDay < requestFromDate) return false
+      if (requestToDate && createdDay && createdDay > requestToDate) return false
+
+      if (!searchText) return true
+
+      const haystack = [
+        request.business_name,
+        request.email,
+        request.phone,
+        request.notes,
+        request.status,
+        request.profile?.industry,
+        request.profile?.stage,
+        request.profile?.goal,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(searchText)
+    })
+  }, [requestsWithProfile, requestSearch, requestFromDate, requestToDate])
+
   const totalProfiles = profiles.length
-  const totalMatches = matches.length
+
+  const totalMatches = useMemo(() => {
+    const grouped: Record<string, number> = {}
+
+    for (const match of matches) {
+      grouped[match.profile_id] = (grouped[match.profile_id] || 0) + 1
+    }
+
+    let total = 0
+    for (const count of Object.values(grouped)) {
+      total += Math.min(count, 5)
+    }
+
+    return total
+  }, [matches])
+
   const totalLeads = leads.length
+  const totalReportRequests = reportRequests.length
   const averageScore = useMemo(() => getAverageScore(matches), [matches])
   const topGrant = useMemo(() => getTopGrant(grants, matches), [grants, matches])
 
@@ -334,6 +465,27 @@ export default function AdminPage() {
     downloadCsv(`matches_${fromLabel}_to_${toLabel}.csv`, exportRows)
   }
 
+  function handleExportRequestsCsv() {
+    if (!filteredRequests.length) return
+
+    const exportRows = filteredRequests.map((request) => ({
+      created_at: request.created_at || '',
+      business_name: request.business_name || '',
+      email: request.email || '',
+      phone: request.phone || '',
+      notes: request.notes || '',
+      status: request.status || '',
+      profile_id: request.profile_id || '',
+      industry: request.profile?.industry || '',
+      stage: request.profile?.stage || '',
+      goal: request.profile?.goal || '',
+    }))
+
+    const fromLabel = requestFromDate || 'all'
+    const toLabel = requestToDate || 'all'
+    downloadCsv(`report_requests_${fromLabel}_to_${toLabel}.csv`, exportRows)
+  }
+
   function clearLeadFilters() {
     setLeadSearch('')
     setLeadFromDate('')
@@ -346,15 +498,19 @@ export default function AdminPage() {
     setMatchToDate('')
   }
 
+  function clearRequestFilters() {
+    setRequestSearch('')
+    setRequestFromDate('')
+    setRequestToDate('')
+  }
+
   if (loading) {
     return (
       <div className="page">
         <div className="loadingWrap">
           <div className="spinner" />
-          <h1 className="loadingTitle">Loading admin insights...</h1>
-          <p className="loadingText">
-            Please wait while we collect leads, matches, and grant activity.
-          </p>
+          <h1 className="loadingTitle">{t('admin.loadingTitle')}</h1>
+          <p className="loadingText">{t('admin.loadingText')}</p>
         </div>
         <style>{styles}</style>
       </div>
@@ -365,9 +521,9 @@ export default function AdminPage() {
     return (
       <div className="page">
         <div className="shell">
-          <div className="brandTop">GrantMatch NB</div>
+          <div className="brandTop">{t('common.brand')}</div>
           <div className="errorCard">
-            <h1 className="errorTitle">Something went wrong</h1>
+            <h1 className="errorTitle">{t('admin.errorTitle')}</h1>
             <p className="errorText">{error}</p>
           </div>
         </div>
@@ -379,46 +535,77 @@ export default function AdminPage() {
   return (
     <div className="page">
       <div className="shell">
-        <div className="brandTop">GrantMatch NB</div>
+        <div className="brandTop">{t('common.brand')}</div>
 
         <div className="heroSection">
-          <div className="heroBadge">Admin Dashboard</div>
-          <h1 className="heroTitle">Leads & Match Tables</h1>
-          <p className="heroText">
-            Use the summary cards for overview, then manage growing data in a clean responsive dashboard with filters and CSV downloads.
-          </p>
+          <div className="heroBadge">{t('admin.heroBadge')}</div>
+          <h1 className="heroTitle">{t('admin.heroTitle')}</h1>
+          <p className="heroText">{t('admin.heroText')}</p>
         </div>
 
         <div className="heroActions">
-          <Link href="/" className="primaryBtn">
-            Back to Home
-          </Link>
+  <Link href="/" className="primaryBtn">
+    {t('common.backHome')}
+  </Link>
 
-          <Link href="/quiz" className="secondaryBtn">
-            Run New Quiz
-          </Link>
+  <Link href="/quiz" className="secondaryBtn">
+    {t('common.runNewQuiz')}
+  </Link>
+
+  <Link href="/admin/review" className="secondaryBtn">
+    {t('common.reviewImportedGrants')}
+  </Link>
+
+  <button
+    type="button"
+    onClick={handleAdminLogout}
+    className="secondaryBtn buttonReset logoutBtn"
+  >
+    Logout
+  </button>
+</div>
+
+        {refreshing && (
+          <div className="panel">
+            <div className="panelSubtitle">{t('admin.refreshing')}</div>
+          </div>
+        )}
+
+<div className="panel">
+  <ExtractProgramUrlsCard />
+</div>
+<div className="panel">
+  <ExtractGrantCard onExtracted={() => loadAdminData(false)} />
+</div>
+        <div className="panel">
+          <ImportGrants onImported={() => loadAdminData(false)} />
         </div>
 
         <div className="statsGrid">
           <StatCard
-            title="Total Profiles"
+            title={t('admin.totalProfiles')}
             value={totalProfiles}
-            subtitle="Saved business profiles created from the quiz."
+            subtitle={t('admin.totalProfilesSub')}
           />
           <StatCard
-            title="Total Leads"
+            title={t('admin.totalLeads')}
             value={totalLeads}
-            subtitle="Captured contact records before results were shown."
+            subtitle={t('admin.totalLeadsSub')}
           />
           <StatCard
-            title="Total Matches"
+            title={t('admin.reportRequests')}
+            value={totalReportRequests}
+            subtitle={t('admin.reportRequestsSub')}
+          />
+          <StatCard
+            title={t('admin.totalSavedMatches')}
             value={totalMatches}
-            subtitle="Recommendation rows stored in match history."
+            subtitle={t('admin.totalSavedMatchesSub')}
           />
           <StatCard
-            title="Average Score"
+            title={t('admin.averageScore')}
             value={averageScore}
-            subtitle="Average recommendation score across all saved matches."
+            subtitle={t('admin.averageScoreSub')}
           />
         </div>
 
@@ -426,13 +613,15 @@ export default function AdminPage() {
           <div className="panel">
             <div className="topGrantWrap">
               <div>
-                <div className="smallMuted">Most Matched Grant</div>
+                <div className="smallMuted">{t('admin.mostMatchedGrant')}</div>
                 <div className="topGrantTitle">{topGrant.name}</div>
-                <div className="topGrantOrg">{topGrant.organization || 'Organization not specified'}</div>
+                <div className="topGrantOrg">
+                  {topGrant.organization || t('common.organizationNotSpecified')}
+                </div>
               </div>
 
               <div className="pillBadge">
-                Matched {topGrant.matchCount} time(s)
+                {t('admin.matchedTimes', { count: topGrant.matchCount })}
               </div>
             </div>
           </div>
@@ -441,14 +630,160 @@ export default function AdminPage() {
         <div className="panel">
           <div className="panelHeader">
             <div>
-              <h2 className="panelTitle">Leads Table</h2>
-              <p className="panelSubtitle">
-                Filter and export lead records by date range or search text.
-              </p>
+              <h2 className="panelTitle">{t('admin.fullReportRequests')}</h2>
+              <p className="panelSubtitle">{t('admin.fullReportRequestsSub')}</p>
             </div>
 
             <div className="panelCount">
-              Showing {filteredLeads.length} of {leads.length} lead(s)
+              {t('admin.showingRequests', {
+                filtered: filteredRequests.length,
+                total: reportRequests.length,
+              })}
+            </div>
+          </div>
+
+          <div className="filterGrid">
+            <input
+              type="date"
+              value={requestFromDate}
+              onChange={(e) => setRequestFromDate(e.target.value)}
+              className="input"
+            />
+
+            <input
+              type="date"
+              value={requestToDate}
+              onChange={(e) => setRequestToDate(e.target.value)}
+              className="input"
+            />
+
+            <input
+              type="text"
+              placeholder={t('admin.searchRequests')}
+              value={requestSearch}
+              onChange={(e) => setRequestSearch(e.target.value)}
+              className="input"
+            />
+
+            <button
+              onClick={handleExportRequestsCsv}
+              disabled={!filteredRequests.length}
+              className="primaryBtn buttonReset"
+            >
+              {t('admin.downloadCsv')}
+            </button>
+
+            <button
+              onClick={clearRequestFilters}
+              className="secondaryBtn buttonReset"
+            >
+              {t('admin.clearFilters')}
+            </button>
+          </div>
+
+          <div className="tableWrap">
+            <table className="dataTable">
+              <thead>
+                <tr>
+                  <th>{t('admin.date')}</th>
+                  <th>{t('admin.businessName')}</th>
+                  <th>{t('admin.email')}</th>
+                  <th>{t('admin.phone')}</th>
+                  <th>{t('admin.status')}</th>
+                  <th>{t('admin.industry')}</th>
+                  <th>{t('admin.stage')}</th>
+                  <th>{t('admin.goal')}</th>
+                  <th>{t('admin.notes')}</th>
+                  <th>{t('admin.profileId')}</th>
+                  <th>{t('admin.report')}</th>
+                  <th>{t('admin.premium')}</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="emptyCell">
+                      {t('admin.noRequests')}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRequests.map((request, index) => (
+                    <tr key={request.id} className={index % 2 === 0 ? 'rowEven' : 'rowOdd'}>
+                      <td>{formatDate(request.created_at)}</td>
+                      <td className="strongCell">{request.business_name || '-'}</td>
+                      <td className="linkCell">{request.email || '-'}</td>
+                      <td>{request.phone || '-'}</td>
+                      <td>
+                        <span className="statusBadge">{request.status || 'new'}</span>
+                      </td>
+                      <td>{request.profile?.industry || '-'}</td>
+                      <td>{request.profile?.stage || '-'}</td>
+                      <td>{request.profile?.goal || '-'}</td>
+                      <td className="wideCell">{request.notes || '-'}</td>
+                      <td className="idCell">{request.profile_id || '-'}</td>
+                      <td>
+                        <a
+                          href={`/api/reports/full-report?profileId=${encodeURIComponent(request.profile_id)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="tableActionBtn"
+                        >
+                          {t('admin.downloadPdf')}
+                        </a>
+                      </td>
+                      <td>
+                        <div className="adminActionStack">
+                          <button
+                            type="button"
+                            onClick={() => handleUnlockPremium(request.profile_id, request.id)}
+                            disabled={unlockingId === String(request.id || request.profile_id)}
+                            className="tableSecondaryBtn"
+                          >
+                            {unlockingId === String(request.id || request.profile_id)
+                              ? t('admin.unlocking')
+                              : t('admin.unlockPremium')}
+                          </button>
+
+                          <a
+                            href={`/results?profileId=${request.profile_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="tableActionBtn"
+                          >
+                            {t('admin.viewResults')}
+                          </a>
+
+                          <a
+                            href={`/results?profileId=${request.profile_id}#draft-generator`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="tableSecondaryBtn tableSecondaryLink"
+                          >
+                            {t('admin.openDraftGenerator')}
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panelHeader">
+            <div>
+              <h2 className="panelTitle">{t('admin.leadsTable')}</h2>
+              <p className="panelSubtitle">{t('admin.leadsTableSub')}</p>
+            </div>
+
+            <div className="panelCount">
+              {t('admin.showingLeads', {
+                filtered: filteredLeads.length,
+                total: leads.length,
+              })}
             </div>
           </div>
 
@@ -469,7 +804,7 @@ export default function AdminPage() {
 
             <input
               type="text"
-              placeholder="Search leads..."
+              placeholder={t('admin.searchLeads')}
               value={leadSearch}
               onChange={(e) => setLeadSearch(e.target.value)}
               className="input"
@@ -480,14 +815,14 @@ export default function AdminPage() {
               disabled={!filteredLeads.length}
               className="primaryBtn buttonReset"
             >
-              Download CSV
+              {t('admin.downloadCsv')}
             </button>
 
             <button
               onClick={clearLeadFilters}
               className="secondaryBtn buttonReset"
             >
-              Clear Filters
+              {t('admin.clearFilters')}
             </button>
           </div>
 
@@ -495,20 +830,16 @@ export default function AdminPage() {
             <table className="dataTable">
               <thead>
                 <tr>
-                  {[
-                    'Date',
-                    'Business Name',
-                    'Contact Name',
-                    'Email',
-                    'Phone',
-                    'Industry',
-                    'Stage',
-                    'Goal',
-                    'Notes',
-                    'Profile ID',
-                  ].map((header) => (
-                    <th key={header}>{header}</th>
-                  ))}
+                  <th>{t('admin.date')}</th>
+                  <th>{t('admin.businessName')}</th>
+                  <th>{t('admin.contactName')}</th>
+                  <th>{t('admin.email')}</th>
+                  <th>{t('admin.phone')}</th>
+                  <th>{t('admin.industry')}</th>
+                  <th>{t('admin.stage')}</th>
+                  <th>{t('admin.goal')}</th>
+                  <th>{t('admin.notes')}</th>
+                  <th>{t('admin.profileId')}</th>
                 </tr>
               </thead>
 
@@ -516,7 +847,7 @@ export default function AdminPage() {
                 {filteredLeads.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="emptyCell">
-                      No leads found for the current filters.
+                      {t('admin.noLeads')}
                     </td>
                   </tr>
                 ) : (
@@ -543,14 +874,15 @@ export default function AdminPage() {
         <div className="panel">
           <div className="panelHeader">
             <div>
-              <h2 className="panelTitle">Matches Table</h2>
-              <p className="panelSubtitle">
-                Track matched grants in a row-based format and export filtered match records.
-              </p>
+              <h2 className="panelTitle">{t('admin.matchesTable')}</h2>
+              <p className="panelSubtitle">{t('admin.matchesTableSub')}</p>
             </div>
 
             <div className="panelCount">
-              Showing {filteredMatches.length} of {matches.length} match(es)
+              {t('admin.showingMatches', {
+                filtered: filteredMatches.length,
+                total: matches.length,
+              })}
             </div>
           </div>
 
@@ -571,7 +903,7 @@ export default function AdminPage() {
 
             <input
               type="text"
-              placeholder="Search matches..."
+              placeholder={t('admin.searchMatches')}
               value={matchSearch}
               onChange={(e) => setMatchSearch(e.target.value)}
               className="input"
@@ -582,14 +914,14 @@ export default function AdminPage() {
               disabled={!filteredMatches.length}
               className="primaryBtn buttonReset"
             >
-              Download CSV
+              {t('admin.downloadCsv')}
             </button>
 
             <button
               onClick={clearMatchFilters}
               className="secondaryBtn buttonReset"
             >
-              Clear Filters
+              {t('admin.clearFilters')}
             </button>
           </div>
 
@@ -597,20 +929,16 @@ export default function AdminPage() {
             <table className="dataTable">
               <thead>
                 <tr>
-                  {[
-                    'Date',
-                    'Grant Name',
-                    'Organization',
-                    'Score',
-                    'Industry',
-                    'Stage',
-                    'Goal',
-                    'Reasons',
-                    'Profile ID',
-                    'Grant ID',
-                  ].map((header) => (
-                    <th key={header}>{header}</th>
-                  ))}
+                  <th>{t('admin.date')}</th>
+                  <th>{t('admin.grantName')}</th>
+                  <th>{t('admin.organization')}</th>
+                  <th>{t('admin.score')}</th>
+                  <th>{t('admin.industry')}</th>
+                  <th>{t('admin.stage')}</th>
+                  <th>{t('admin.goal')}</th>
+                  <th>{t('admin.reasons')}</th>
+                  <th>{t('admin.profileId')}</th>
+                  <th>{t('admin.grantId')}</th>
                 </tr>
               </thead>
 
@@ -618,7 +946,7 @@ export default function AdminPage() {
                 {filteredMatches.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="emptyCell">
-                      No matches found for the current filters.
+                      {t('admin.noMatches')}
                     </td>
                   </tr>
                 ) : (
@@ -752,6 +1080,15 @@ const styles = `
     border: 1px solid rgba(255,255,255,0.1);
     color: white;
   }
+    .logoutBtn {
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.28);
+  color: #fecaca;
+}
+
+.logoutBtn:hover {
+  background: rgba(239,68,68,0.18);
+}
 
   .buttonReset {
     cursor: pointer;
@@ -902,7 +1239,7 @@ const styles = `
   .dataTable {
     width: 100%;
     border-collapse: collapse;
-    min-width: 900px;
+    min-width: 1180px;
   }
 
   .dataTable thead tr {
@@ -982,6 +1319,60 @@ const styles = `
     background: rgba(255,255,255,0.12);
   }
 
+  .statusBadge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(2,195,154,0.12);
+    border: 1px solid rgba(2,195,154,0.25);
+    color: #02C39A;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+
+  .tableActionBtn,
+  .tableSecondaryBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    border: none;
+    cursor: pointer;
+  }
+
+  .tableActionBtn {
+    background: linear-gradient(90deg, #028090, #02C39A);
+    color: white;
+  }
+
+  .tableSecondaryBtn {
+    background: rgba(255,255,255,0.08);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .tableSecondaryBtn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .tableSecondaryLink {
+    text-decoration: none;
+  }
+
+  .adminActionStack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 170px;
+  }
+
   .loadingWrap {
     max-width: 1100px;
     margin: 0 auto;
@@ -1011,7 +1402,7 @@ const styles = `
     margin: 0;
   }
 
-   .errorCard {
+  .errorCard {
     max-width: 760px;
     margin: 60px auto 0;
     background: rgba(239,68,68,0.12);
@@ -1071,6 +1462,10 @@ const styles = `
 
     .panelCount {
       width: 100%;
+    }
+
+    .adminActionStack {
+      min-width: 150px;
     }
   }
 `
