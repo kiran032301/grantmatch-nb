@@ -376,7 +376,8 @@ async function syncPrograms(programs: ImportedGrant[]) {
         id: existing!.id,
         is_active: existing!.is_active ?? false,
         verification_status: existing!.verification_status ?? 'review_pending',
-        updated_at: new Date().toISOString(),
+last_verified_at: new Date().toISOString(),
+updated_at: new Date().toISOString(),
       }
     })
 

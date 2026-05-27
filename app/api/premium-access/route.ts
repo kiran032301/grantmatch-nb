@@ -1,31 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-export async function GET(req: NextRequest) {
-  try {
-    const profileId = req.nextUrl.searchParams.get('profileId')?.trim()
-
-    if (!profileId) {
-      return NextResponse.json({ error: 'Missing profileId' }, { status: 400 })
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('premium_access')
-      .select('is_active')
-      .eq('profile_id', profileId)
-      .maybeSingle()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({
-      success: true,
-      isActive: !!data?.is_active,
-    })
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Failed to load premium access'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
+// FREE ACCESS PERIOD: All users get full premium access until ~Nov 2025.
+// To re-enable paid gating, remove this early return and uncomment the
+// Supabase lookup below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_req: NextRequest) {
+  return NextResponse.json({ success: true, isActive: true })
 }
+
+// --- Original paid-gating logic (restore when free period ends) ---
+// import { supabaseAdmin } from '@/lib/supabaseAdmin'
+// export async function GET(req: NextRequest) {
+//   try {
+//     const profileId = req.nextUrl.searchParams.get('profileId')?.trim()
+//     if (!profileId) return NextResponse.json({ error: 'Missing profileId' }, { status: 400 })
+//     const { data, error } = await supabaseAdmin
+//       .from('premium_access').select('is_active').eq('profile_id', profileId).maybeSingle()
+//     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+//     return NextResponse.json({ success: true, isActive: !!data?.is_active })
+//   } catch (error) {
+//     const message = error instanceof Error ? error.message : 'Failed to load premium access'
+//     return NextResponse.json({ error: message }, { status: 500 })
+//   }
+// }

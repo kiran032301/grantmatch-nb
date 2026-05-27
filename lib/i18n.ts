@@ -288,6 +288,13 @@ statusOpen: 'Open',
 statusRolling: 'Rolling',
 statusUpcoming: 'Upcoming',
 excellentMatch: 'Excellent Match',
+
+statusConfidence: 'Status Confidence',
+lastVerified: 'Last Verified',
+verifiedStatus: 'Verified',
+reviewPendingStatus: 'Needs Review',
+unconfirmedStatus: 'Unconfirmed',
+statusDisclaimer: 'Status reflects the latest stored program data and should be confirmed with the provider before applying.',
       },
 
       admin: {
@@ -652,6 +659,13 @@ statusOpen: 'Ouvert',
 statusRolling: 'En continu',
 statusUpcoming: 'À venir',
 excellentMatch: 'Correspondance excellente',
+
+statusConfidence: 'Fiabilité du statut',
+lastVerified: 'Dernière vérification',
+verifiedStatus: 'Vérifié',
+reviewPendingStatus: 'À vérifier',
+unconfirmedStatus: 'Non confirmé',
+statusDisclaimer: "Le statut reflète les dernières données enregistrées du programme et doit être confirmé auprès de l'organisme avant de postuler.",
       },
 
       admin: {

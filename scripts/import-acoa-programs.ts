@@ -1,5 +1,5 @@
-import { loadEnvConfig } from '@next/env'
-loadEnvConfig(process.cwd())
+//import { loadEnvConfig } from '@next/env'
+//loadEnvConfig(process.cwd())
 
 console.log('SUPABASE URL loaded:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
 console.log('SERVICE ROLE loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -447,7 +447,8 @@ async function syncPrograms(programs: ImportedGrant[]) {
         id: existing!.id,
         is_active: existing!.is_active ?? false,
         verification_status: existing!.verification_status ?? 'review_pending',
-        updated_at: new Date().toISOString(),
+last_verified_at: new Date().toISOString(),
+updated_at: new Date().toISOString(),
       }
     })
 

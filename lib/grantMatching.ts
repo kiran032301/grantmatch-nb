@@ -37,12 +37,14 @@ export type Grant = {
   supports_rd?: boolean | null
   intake_status: string | null
   url: string | null
+  url_status?: string | null
   is_active?: boolean | null
   sort_priority?: number | null
   last_verified_at?: string | null
   verification_status?: string | null
   business_relevance?: 'high' | 'medium' | 'low' | string | null
   source_name?: string | null
+
 }
 
 export type ScoredGrant = Grant & {
@@ -73,36 +75,36 @@ export type ScoredGrant = Grant & {
 }
 
 const WEIGHTS = {
-  industry: 25,
-  stage: 15,
-  goal: 20,
-  does_rd: 10,
-  funding_preference: 5,
+  industry: 40,   // 🔥 MOST IMPORTANT
+  goal: 30,       // 🔥 VERY IMPORTANT
+  stage: 20,
+  does_rd: 15,
+  funding_preference: 10,
 
-  location: 5,
+  location: 10,
   expansion_investment: 5,
-  funding_need_type: 5,
-  innovation_depth: 5,
+  funding_need_type: 10,
+  innovation_depth: 8,
   ownership_type: 5,
 
-  fundingTypeGrantBonus: 6,
-  fundingTypeLoanPenalty: -2,
+  fundingTypeGrantBonus: 8,
+  fundingTypeLoanPenalty: -5,
 
-  intakeOpen: 8,
+  intakeOpen: 10,
   intakeRolling: 6,
-  intakeUpcoming: 3,
+  intakeUpcoming: 2,
 
-  verification: 4,
+  verification: 6,
 
-  businessRelevanceHigh: 8,
-  businessRelevanceMedium: 4,
+  businessRelevanceHigh: 12,
+  businessRelevanceMedium: 6,
 
-  sourceTrustProvincial: 6,
-  sourceTrustInnovation: 5,
-  sourceTrustVerified: 4,
+  sourceTrustProvincial: 8,
+  sourceTrustInnovation: 6,
+  sourceTrustVerified: 5,
 }
 
-const MIN_MATCH_SCORE = 24
+const MIN_MATCH_SCORE = 40
 
 const CORE_PROGRAM_BOOST = [
   'job grant',
@@ -118,8 +120,8 @@ const CORE_PROGRAM_BOOST = [
 ]
 
 export function toMatchPercent(rawScore: number): number {
-  const minScore = 24
-  const maxScore = 120
+  const minScore = 40
+  const maxScore = 130
 
   if (rawScore <= minScore) return 35
   if (rawScore >= maxScore) return 98
@@ -134,112 +136,6 @@ export function getMatchLabel(percent: number): string {
   if (percent >= 60) return 'Good Match'
   if (percent >= 45) return 'Possible Fit'
   return 'Low Match'
-}
-
-function scoreLocation(profile: Profile, grant: Grant): number {
-  const location = (profile.business_location || '').toLowerCase()
-  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
-
-  if (!location || location.includes('outside')) return 0
-
-  if (
-    location.includes('new brunswick') ||
-    location.includes('fredericton') ||
-    location.includes('moncton') ||
-    location.includes('saint john')
-  ) {
-    if (text.includes('new brunswick') || text.includes('nb')) {
-      return WEIGHTS.location
-    }
-  }
-
-  return 0
-}
-
-function scoreExpansionInvestment(profile: Profile, grant: Grant): number {
-  const value = profile.expansion_investment || ''
-  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
-
-  if (value === 'Yes') {
-    if (
-      text.includes('capital') ||
-      text.includes('equipment') ||
-      text.includes('expansion') ||
-      text.includes('investment')
-    ) {
-      return WEIGHTS.expansion_investment
-    }
-  }
-
-  if (value === 'Not sure') {
-    return Math.round(WEIGHTS.expansion_investment / 2)
-  }
-
-  return 0
-}
-
-function scoreFundingNeedType(profile: Profile, grant: Grant): number {
-  const wanted = (profile.funding_need_type || '').toLowerCase()
-  const type = `${grant.funding_type || ''} ${grant.type || ''}`.toLowerCase()
-  const name = (grant.name || '').toLowerCase()
-
-  if (!wanted || wanted === 'not sure') {
-    return Math.round(WEIGHTS.funding_need_type / 2)
-  }
-
-  if (wanted === 'grant' && (type.includes('grant') || grant.repayable === false)) {
-    return WEIGHTS.funding_need_type
-  }
-
-  if (wanted === 'loan' && (type.includes('loan') || grant.repayable === true)) {
-    return WEIGHTS.funding_need_type
-  }
-
-  if (wanted === 'investment' && (name.includes('capital') || name.includes('investment'))) {
-    return WEIGHTS.funding_need_type
-  }
-
-  if (wanted === 'tax credit' && type.includes('tax')) {
-    return WEIGHTS.funding_need_type
-  }
-
-  return 0
-}
-
-function scoreInnovationDepth(profile: Profile, grant: Grant): number {
-  const value = profile.innovation_depth || ''
-  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
-
-  if (
-    text.includes('innovation') ||
-    text.includes('technology') ||
-    text.includes('research') ||
-    text.includes('commercialization')
-  ) {
-    if (value === 'Yes - core focus') return WEIGHTS.innovation_depth
-    if (value === 'Some innovation') return Math.round(WEIGHTS.innovation_depth * 0.7)
-  }
-
-  return 0
-}
-
-function scoreOwnershipType(profile: Profile, grant: Grant): number {
-  const value = (profile.ownership_type || '').toLowerCase()
-  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
-
-  if (value.includes('women') && (text.includes('women') || text.includes('gender'))) {
-    return WEIGHTS.ownership_type
-  }
-
-  if (value.includes('indigenous') && text.includes('indigenous')) {
-    return WEIGHTS.ownership_type
-  }
-
-  if (value.includes('youth') && text.includes('youth')) {
-    return WEIGHTS.ownership_type
-  }
-
-  return 0
 }
 
 function normalizeTags(tags: string[] | string | null | undefined): string[] {
@@ -405,10 +301,6 @@ function normalizeGoal(goal: string | null): string[] {
   return Array.from(tags)
 }
 
-function getGrantFundingType(grant: Grant): string {
-  return (grant.funding_type || grant.type || 'program').toLowerCase()
-}
-
 function getSearchableText(grant: Grant): string {
   return [
     grant.name,
@@ -439,29 +331,46 @@ function overlapScore(profileTags: string[], grantTags: string[], maxWeight: num
   return Math.round(maxWeight * 0.65)
 }
 
+function getCanonicalFundingInfo(grant: Grant) {
+  const fundingTypeText = `${grant.funding_type || ''} ${grant.type || ''}`.toLowerCase()
+  const name = (grant.name || '').toLowerCase()
+
+  const isInvestmentByName = name.includes('venture') || name.includes('capital')
+  const isLoan = fundingTypeText.includes('loan') || grant.repayable === true
+  const isGrant = !isLoan && (fundingTypeText.includes('grant') || grant.repayable === false)
+  const isTaxCredit = fundingTypeText.includes('tax')
+  const isRebate = fundingTypeText.includes('rebate')
+
+  return {
+    isLoan,
+    isGrant,
+    isTaxCredit,
+    isRebate,
+    isInvestmentByName,
+  }
+}
+
 function getFundingPreferenceScore(profile: Profile, grant: Grant): number {
   const preference = (profile.funding_preference || '').toLowerCase()
-  const grantFundingType = getGrantFundingType(grant)
-  const isLoan = grant.repayable === true || grantFundingType.includes('loan')
-  const isGrant = grant.repayable === false || grantFundingType.includes('grant')
+  const funding = getCanonicalFundingInfo(grant)
 
   if (!preference) return 0
 
   if (preference.includes('grants only')) {
-    if (isGrant) return 4
-    if (isLoan) return -12
+    if (funding.isGrant) return 4
+    if (funding.isLoan) return -12
     return 0
   }
 
   if (preference.includes('prefer grants')) {
-    if (isGrant) return 3
-    if (isLoan) return -5
+    if (funding.isGrant) return 3
+    if (funding.isLoan) return -5
     return 0
   }
 
   if (preference.includes('open to both')) {
-    if (isGrant) return 1
-    if (isLoan) return 0
+    if (funding.isGrant) return 1
+    if (funding.isLoan) return 0
     return 0
   }
 
@@ -489,6 +398,111 @@ function isGrantLive(grant: Grant): boolean {
   return grant.is_active === true && (grant.verification_status || '').toLowerCase() === 'verified'
 }
 
+function scoreLocation(profile: Profile, grant: Grant): number {
+  const location = (profile.business_location || '').toLowerCase()
+  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
+
+  if (!location || location.includes('outside')) return 0
+
+  if (
+    location.includes('new brunswick') ||
+    location.includes('fredericton') ||
+    location.includes('moncton') ||
+    location.includes('saint john')
+  ) {
+    if (text.includes('new brunswick') || text.includes('nb')) {
+      return WEIGHTS.location
+    }
+  }
+
+  return 0
+}
+
+function scoreExpansionInvestment(profile: Profile, grant: Grant): number {
+  const value = profile.expansion_investment || ''
+  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
+
+  if (value === 'Yes') {
+    if (
+      text.includes('capital') ||
+      text.includes('equipment') ||
+      text.includes('expansion') ||
+      text.includes('investment')
+    ) {
+      return WEIGHTS.expansion_investment
+    }
+  }
+
+  if (value === 'Not sure') {
+    return Math.round(WEIGHTS.expansion_investment / 2)
+  }
+
+  return 0
+}
+
+function scoreFundingNeedType(profile: Profile, grant: Grant): number {
+  const wanted = (profile.funding_need_type || '').toLowerCase()
+  const funding = getCanonicalFundingInfo(grant)
+
+  if (!wanted || wanted === 'not sure') {
+    return Math.round(WEIGHTS.funding_need_type / 2)
+  }
+
+  if (wanted === 'grant' && funding.isGrant) {
+    return WEIGHTS.funding_need_type
+  }
+
+  if (wanted === 'loan' && funding.isLoan) {
+    return WEIGHTS.funding_need_type
+  }
+
+  if (wanted === 'investment' && funding.isInvestmentByName) {
+    return WEIGHTS.funding_need_type
+  }
+
+  if (wanted === 'tax credit' && funding.isTaxCredit) {
+    return WEIGHTS.funding_need_type
+  }
+
+  return 0
+}
+
+function scoreInnovationDepth(profile: Profile, grant: Grant): number {
+  const value = profile.innovation_depth || ''
+  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
+
+  if (
+    text.includes('innovation') ||
+    text.includes('technology') ||
+    text.includes('research') ||
+    text.includes('commercialization')
+  ) {
+    if (value === 'Yes - core focus') return WEIGHTS.innovation_depth
+    if (value === 'Some innovation') return Math.round(WEIGHTS.innovation_depth * 0.7)
+  }
+
+  return 0
+}
+
+function scoreOwnershipType(profile: Profile, grant: Grant): number {
+  const value = (profile.ownership_type || '').toLowerCase()
+  const text = `${grant.name || ''} ${grant.description || ''} ${grant.eligibility || ''}`.toLowerCase()
+
+  if (value.includes('women') && (text.includes('women') || text.includes('gender'))) {
+    return WEIGHTS.ownership_type
+  }
+
+  if (value.includes('indigenous') && text.includes('indigenous')) {
+    return WEIGHTS.ownership_type
+  }
+
+  if (value.includes('youth') && text.includes('youth')) {
+    return WEIGHTS.ownership_type
+  }
+
+  return 0
+}
+
 export function scoreGrant(profile: Profile, grant: Grant): ScoredGrant {
   let score = 0
   const reasons: string[] = []
@@ -501,7 +515,7 @@ export function scoreGrant(profile: Profile, grant: Grant): ScoredGrant {
   const grantStages = normalizeTags(grant.stage_tags)
   const grantGoals = normalizeTags(grant.goal_tags)
   const searchableText = getSearchableText(grant)
-  const grantFundingType = getGrantFundingType(grant)
+  const funding = getCanonicalFundingInfo(grant)
 
   let industryScore = overlapScore(profileIndustries, grantIndustries, WEIGHTS.industry)
 
@@ -582,13 +596,13 @@ export function scoreGrant(profile: Profile, grant: Grant): ScoredGrant {
   }
 
   let fundingTypeScore = 0
-  if (grant.repayable === false || grantFundingType.includes('grant')) {
+  if (funding.isLoan) {
+    fundingTypeScore = WEIGHTS.fundingTypeLoanPenalty
+    score += fundingTypeScore
+  } else if (funding.isGrant || funding.isTaxCredit || funding.isRebate) {
     fundingTypeScore = WEIGHTS.fundingTypeGrantBonus
     score += fundingTypeScore
     reasons.push('This is non-repayable funding, so you don’t need to pay it back.')
-  } else if (grant.repayable === true || grantFundingType.includes('loan')) {
-    fundingTypeScore = WEIGHTS.fundingTypeLoanPenalty
-    score += fundingTypeScore
   }
 
   const fundingPreferenceScore = getFundingPreferenceScore(profile, grant)

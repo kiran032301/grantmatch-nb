@@ -577,6 +577,8 @@ async function upsertGrant(grant: ImportedGrant) {
     .insert({
       ...grant,
       updated_at: new Date().toISOString(),
+      verification_status: 'verified',
+last_verified_at: new Date().toISOString(),
     })
     .select('id')
     .single()

@@ -165,22 +165,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Grant not found' }, { status: 404 })
     }
 
-    const { data: premiumAccess, error: premiumError } = await supabaseAdmin
-      .from('premium_access')
-      .select('is_active')
-      .eq('profile_id', profileId)
-      .maybeSingle()
-
-    if (premiumError) {
-      return NextResponse.json({ error: premiumError.message }, { status: 500 })
-    }
-
-    if (!premiumAccess?.is_active) {
-      return NextResponse.json(
-        { error: 'Draft generation is available only for premium access.' },
-        { status: 403 }
-      )
-    }
+    // FREE ACCESS PERIOD: premium check removed. Restore the Supabase
+    // premium_access lookup here when the free period ends.
 
     const prompt = buildPrompt(profile, grant, language)
 

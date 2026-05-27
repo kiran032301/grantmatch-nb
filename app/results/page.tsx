@@ -21,7 +21,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import '@/lib/i18n'
 
-const FREE_VISIBLE_COUNT = 2
+// FREE ACCESS PERIOD: show all matches. Restore FREE_VISIBLE_COUNT = 2 when paid gating resumes.
+const FREE_VISIBLE_COUNT = 999 // effectively unlimited
 const FULL_REPORT_COUNT = 5
 
 function getGrantName(grant: Grant, language: string) {
@@ -440,11 +441,12 @@ function ResultsContent() {
     loadMatches()
   }, [profileId])
 
-  const visibleMatches = useMemo(() => matches.slice(0, FREE_VISIBLE_COUNT), [matches])
+  // FREE ACCESS PERIOD: show all matches and always grant premium access.
+  const visibleMatches = useMemo(() => matches, [matches])
   const totalMatchesCount = matches.length
   const fullReportCount = totalMatchesCount
-  const lockedMatchesCount = Math.max(fullReportCount - FREE_VISIBLE_COUNT, 0)
-  const showPremiumSection = lockedMatchesCount > 0
+  const lockedMatchesCount = 0 // no locks during free period
+  const showPremiumSection = false // hide paywall during free period
   const fundingMixItems = useMemo(() => getFundingMixBuckets(visibleMatches), [visibleMatches])
 
   async function handleRequestFullReport() {
@@ -550,6 +552,14 @@ function ResultsContent() {
     }
   }
 
+  function handleOpenDraftModal(grant: ScoredGrant) {
+    setSelectedDraftGrant(grant)
+    setShowDraftModal(true)
+    setDraftLoading(false)
+    setDraftError(null)
+    setDraftContent(null)
+  }
+
   async function handleGenerateDraft(grant: ScoredGrant) {
     try {
       if (!profileId) {
@@ -557,8 +567,6 @@ function ResultsContent() {
         return
       }
 
-      setSelectedDraftGrant(grant)
-      setShowDraftModal(true)
       setDraftLoading(true)
       setDraftError(null)
       setDraftContent(null)
@@ -839,9 +847,9 @@ ${draftContent.closing_statement}
           <div className="heroNotice">
             {t('results.heroNotice', {
               count: evaluatedProgramsCount,
-              visible: Math.min(FREE_VISIBLE_COUNT, matches.length),
+              visible: matches.length,
               suffix:
-                Math.min(FREE_VISIBLE_COUNT, matches.length) === 1
+                matches.length === 1
                   ? ''
                   : i18n.language.startsWith('fr')
                   ? 's'
@@ -1054,6 +1062,13 @@ console.log('GRANT DESC FR', (grant as Grant & { description_fr?: string | null 
                           {t('results.viewGrantDetails')}
                         </a>
                       )}
+                      <button
+                        type="button"
+                        className="secondaryActionBtn"
+                        onClick={() => handleOpenDraftModal(grant)}
+                      >
+                        {sectionLabels.generateDraft}
+                      </button>
                     </div>
                   </div>
                 )
@@ -1136,69 +1151,7 @@ console.log('GRANT DESC FR', (grant as Grant & { description_fr?: string | null 
           </>
         )}
 
-        {premiumChecked && hasPremiumAccess && matches.length > 0 && (
-          <div className="panel" id="draft-generator">
-            <div className="panelHeader">
-              <div>
-                <h2 className="panelTitle">{sectionLabels.draftGenerator}</h2>
-                <p className="panelSubtitle">{sectionLabels.draftGeneratorSubtitle}</p>
 
-                <div className="draftLanguageRow">
-                  <label className="draftLanguageLabel">{sectionLabels.draftLanguage}</label>
-                  <select
-                    value={draftLanguage}
-                    onChange={(e) => setDraftLanguage(e.target.value as 'en' | 'fr')}
-                    className="modalInput draftLanguageSelect"
-                  >
-                    <option value="en">English</option>
-                    <option value="fr">Français</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="profileBadge">{t('results.premiumFeature')}</div>
-            </div>
-
-            <div className="resultsList">
-              {matches.map((grant) => {
-                const scoreMeta = getScoreMeta(grant.matchPercent ?? 0, t)
-
-                return (
-                  <div key={`draft-${grant.id}`} className="grantCard">
-                    <div className="grantTop">
-                      <div className="grantTopLeft">
-                        <h2 className="grantTitle">
-                         {getGrantName(grant, i18n.language)}
-                        </h2>
-
-                        <p className="grantOrg">
-                          {grant.organization || t('common.organizationNotSpecified')}
-                        </p>
-                      </div>
-
-                      <div className={`scoreCard ${scoreMeta.className}`}>
-  <div className="scoreLabel">{scoreMeta.label}</div>
-  <div className="scoreValue">{grant.matchPercent ?? 0}%</div>
-</div>
-                    </div>
-
-                    <p className="grantDescription">{getGrantDescription(grant, i18n.language)}</p>
-
-                    <div className="grantActions">
-                      <button
-                        type="button"
-                        className="secondaryActionBtn"
-                        onClick={() => handleGenerateDraft(grant)}
-                      >
-                        {sectionLabels.generateDraft}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {showRequestModal && (
@@ -1285,6 +1238,29 @@ console.log('GRANT DESC FR', (grant as Grant & { description_fr?: string | null 
             </h3>
 
             <p className="modalText">{sectionLabels.draftIntro}</p>
+
+            {!draftContent && !draftLoading && (
+              <div className="draftLanguageRow">
+                <label className="draftLanguageLabel">{sectionLabels.draftLanguage}</label>
+                <select
+                  value={draftLanguage}
+                  onChange={(e) => setDraftLanguage(e.target.value as 'en' | 'fr')}
+                  className="modalInput draftLanguageSelect"
+                >
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                </select>
+                {selectedDraftGrant && (
+                  <button
+                    type="button"
+                    className="primaryModalBtn"
+                    onClick={() => handleGenerateDraft(selectedDraftGrant)}
+                  >
+                    {sectionLabels.generateDraft}
+                  </button>
+                )}
+              </div>
+            )}
 
             {draftLoading && (
               <div className="panel">

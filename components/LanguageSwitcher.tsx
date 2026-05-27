@@ -1,40 +1,53 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/lib/i18n'
 
 export default function LanguageSwitcher() {
   const { t, i18n } = useTranslation()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   function handleChange(lang: 'en' | 'fr') {
     i18n.changeLanguage(lang)
-    localStorage.setItem('app_language', lang)
-    document.documentElement.lang = lang
-  }
 
-  if (!mounted) {
-    return null
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('app_language', lang)
+      document.documentElement.lang = lang
+    }
   }
 
   return (
-    <div className="languageSwitcher">
-      <label htmlFor="lang-select" className="languageLabel">
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexShrink: 0,
+        minWidth: '170px',
+        whiteSpace: 'nowrap',
+        color: 'white',
+        fontSize: '14px',
+        zIndex: 9999,
+      }}
+    >
+      <label htmlFor="lang-select">
         {t('common.language')}
       </label>
+
       <select
         id="lang-select"
         value={i18n.language.startsWith('fr') ? 'fr' : 'en'}
         onChange={(e) => handleChange(e.target.value as 'en' | 'fr')}
-        className="languageSelect"
+        style={{
+          minWidth: '96px',
+          padding: '6px 8px',
+          borderRadius: '8px',
+          border: '1px solid rgba(255,255,255,0.25)',
+          background: '#10284c',
+          color: 'white',
+        }}
       >
-        <option value="en">{t('common.english')}</option>
-        <option value="fr">{t('common.french')}</option>
+        <option value="en">English</option>
+        <option value="fr">Français</option>
       </select>
     </div>
   )

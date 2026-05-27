@@ -2,30 +2,42 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exec } from 'child_process'
 import path from 'path'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import 'cheerio'
 
 type ScriptRunResult = {
   stdout: string
   stderr: string
 }
 
-function runScript(scriptName: string) {
-  return new Promise<ScriptRunResult>((resolve, reject) => {
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+function runScript(scriptName: string): Promise<ScriptRunResult> {
+  return new Promise((resolve, reject) => {
     const projectRoot = process.cwd()
     const scriptPath = path.join(projectRoot, 'scripts', scriptName)
 
     exec(
-      `npx tsx "${scriptPath}"`,
-      { cwd: projectRoot },
+      `npx --yes tsx "${scriptPath}"`,
+      {
+        cwd: projectRoot,
+        env: {
+          ...process.env,
+          HOME: '/tmp',
+          npm_config_cache: '/tmp/.npm',
+          NODE_PATH: path.join(projectRoot, 'node_modules'),
+         // npm_config_tmp: '/tmp',
+        },
+        maxBuffer: 1024 * 1024 * 10,
+        timeout: 1000 * 60 * 3,
+      },
       (error, stdout, stderr) => {
         if (error) {
           reject(new Error(stderr || stdout || error.message))
           return
         }
 
-        resolve({
-          stdout: stdout || '',
-          stderr: stderr || '',
-        })
+        resolve({ stdout, stderr })
       }
     )
   })

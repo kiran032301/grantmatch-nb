@@ -6,9 +6,13 @@ import * as cheerio from 'cheerio'
 import OpenAI from 'openai'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing')
+  }
+  return new OpenAI({ apiKey })
+}
 
 function cleanText(value?: string | null): string {
   return (value || '').replace(/\s+/g, ' ').trim()
@@ -190,6 +194,8 @@ type ClassificationResult = {
 }
 
 async function classifyPage(page: Awaited<ReturnType<typeof fetchPage>>, inputUrl: string) {
+  const openai = getOpenAI()
+
   const prompt = `
 Classify this webpage for a Canadian business-funding database.
 
@@ -301,6 +307,8 @@ const ALLOWED_GOAL_TAGS = [
 ]
 
 async function extractGrantData(page: Awaited<ReturnType<typeof fetchPage>>, inputUrl: string) {
+  const openai = getOpenAI()
+
   const schema = {
     name: 'grant_extraction',
     strict: true,
@@ -499,7 +507,6 @@ async function processSingleUrl(inputUrl: string) {
 
   const normalizedUrl = parsedUrl.toString()
 
-  // Skip AI entirely if URL already exists
   const { data: existing } = await supabaseAdmin
     .from('grants')
     .select('id, is_active, verification_status')
@@ -534,12 +541,12 @@ async function processSingleUrl(inputUrl: string) {
   const sourceName = parsedUrl.hostname.includes('canada.ca')
     ? 'CANADA_MAIN'
     : parsedUrl.hostname.includes('gnb.ca')
-    ? 'GNB'
-    : parsedUrl.hostname.includes('onbcanada.ca')
-    ? 'ONB'
-    : parsedUrl.hostname.includes('nbif.ca')
-    ? 'NBIF'
-    : 'MANUAL_URL'
+      ? 'GNB'
+      : parsedUrl.hostname.includes('onbcanada.ca')
+        ? 'ONB'
+        : parsedUrl.hostname.includes('nbif.ca')
+          ? 'NBIF'
+          : 'MANUAL_URL'
 
   const sourceProgramId = slugify(`${sourceName}-${finalName}`)
 
@@ -659,8 +666,8 @@ export async function POST(req: NextRequest) {
     }> = []
 
     let inserted = 0
-let skipped = 0
-let failed = 0
+    let skipped = 0
+    let failed = 0
 
     for (const url of uniqueUrls) {
       try {
@@ -691,7 +698,7 @@ let failed = 0
             error: first.error || 'This URL was skipped.',
             classification: first.extractionMeta,
             results,
-            summary: { inserted, updated: 0, skipped, failed }
+            summary: { inserted, updated: 0, skipped, failed },
           },
           { status: 400 }
         )
@@ -702,7 +709,7 @@ let failed = 0
           {
             error: first.error || 'Extraction failed.',
             results,
-           summary: { inserted, updated: 0, skipped, failed }
+            summary: { inserted, updated: 0, skipped, failed },
           },
           { status: 500 }
         )
@@ -715,7 +722,7 @@ let failed = 0
         grant: first.grant,
         extractionMeta: first.extractionMeta,
         results,
-        summary: { inserted, updated: 0, skipped, failed }
+        summary: { inserted, updated: 0, skipped, failed },
       })
     }
 
@@ -726,7 +733,7 @@ let failed = 0
           ? 'Batch extraction completed.'
           : 'Batch extraction completed with some failures.',
       results,
-      summary: { inserted, updated: 0, skipped, failed }
+      summary: { inserted, updated: 0, skipped, failed },
     })
   } catch (error) {
     const message =
