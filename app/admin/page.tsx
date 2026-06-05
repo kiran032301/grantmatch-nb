@@ -167,6 +167,11 @@ export default function AdminPage() {
   const [reportRequests, setReportRequests] = useState<ReportRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [statusRefreshing, setStatusRefreshing] = useState(false)
+  const [statusRefreshResults, setStatusRefreshResults] = useState<{
+    summary: { total: number; updated: number; unchanged: number; failed: number }
+    results: Array<{ name: string; previous_status: string; new_status: string; changed: boolean; evidence: string | null; error?: string }>
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [unlockingId, setUnlockingId] = useState<string | null>(null)
 
@@ -226,6 +231,32 @@ export default function AdminPage() {
   useEffect(() => {
     loadAdminData(true)
   }, [])
+
+  async function handleRefreshGrantStatus() {
+    try {
+      setStatusRefreshing(true)
+      setStatusRefreshResults(null)
+      const res = await fetch('/api/admin/refresh-grant-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 20 }),
+      })
+      const text = await res.text()
+      let json: any
+      try {
+        json = JSON.parse(text)
+      } catch {
+        throw new Error(`Server error: ${text.slice(0, 120)}`)
+      }
+      if (!res.ok) throw new Error(json?.error || 'Status refresh failed')
+      setStatusRefreshResults(json)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Status refresh failed')
+    } finally {
+      setStatusRefreshing(false)
+      loadAdminData(false)
+    }
+  }
 
   async function handleUnlockPremium(profileId: string, requestId?: string | number) {
     try {
@@ -558,6 +589,15 @@ export default function AdminPage() {
 
   <button
     type="button"
+    onClick={handleRefreshGrantStatus}
+    disabled={statusRefreshing}
+    className="secondaryBtn buttonReset"
+  >
+    {statusRefreshing ? '⏳ Checking statuses...' : '🔄 Refresh Grant Status'}
+  </button>
+
+  <button
+    type="button"
     onClick={handleAdminLogout}
     className="secondaryBtn buttonReset logoutBtn"
   >
@@ -568,6 +608,87 @@ export default function AdminPage() {
         {refreshing && (
           <div className="panel">
             <div className="panelSubtitle">{t('admin.refreshing')}</div>
+          </div>
+        )}
+
+        {statusRefreshResults && (
+          <div className="panel">
+            <div className="panelHeader">
+              <div>
+                <h2 className="panelTitle">Grant Status Refresh Results</h2>
+                <p className="panelSubtitle">
+                  {statusRefreshResults.summary.total === 0
+                    ? '✓ All grants checked within last 24 hours'
+                    : <>
+                        {statusRefreshResults.summary.total} grants checked &nbsp;·&nbsp;
+                        <span style={{ color: '#02c39a' }}>{statusRefreshResults.summary.updated} updated</span> &nbsp;·&nbsp;
+                        {statusRefreshResults.summary.unchanged} unchanged &nbsp;·&nbsp;
+                        <span style={{ color: '#f87171' }}>{statusRefreshResults.summary.failed} failed</span>
+                        &nbsp;·&nbsp; <em style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Run again to check remaining grants</em>
+                      </>
+                  }
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="secondaryBtn buttonReset"
+                  onClick={handleRefreshGrantStatus}
+                  disabled={statusRefreshing}
+                >
+                  {statusRefreshing ? '⏳ Checking...' : '▶ Check Next 20'}
+                </button>
+                <button
+                  type="button"
+                  className="secondaryBtn buttonReset"
+                  onClick={() => setStatusRefreshResults(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+            <div className="tableWrapper">
+              <table className="dataTable">
+                <thead>
+                  <tr>
+                    <th>Grant Name</th>
+                    <th>Previous Status</th>
+                    <th>New Status</th>
+                    <th>Changed</th>
+                    <th>Evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statusRefreshResults.results.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.name}</td>
+                      <td>
+                        <span className={`statusBadge statusBadge--${r.previous_status}`}>
+                          {r.previous_status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`statusBadge statusBadge--${r.new_status}`}>
+                          {r.new_status}
+                        </span>
+                      </td>
+                      <td>
+                        {r.error ? (
+                          <span style={{ color: '#f87171', fontSize: 12 }}>Error: {r.error}</span>
+                        ) : r.changed ? (
+                          <span style={{ color: '#02c39a', fontWeight: 600 }}>✓ Updated</span>
+                        ) : (
+                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', maxWidth: 280 }}>
+                        {r.evidence || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -840,13 +961,14 @@ export default function AdminPage() {
                   <th>{t('admin.goal')}</th>
                   <th>{t('admin.notes')}</th>
                   <th>{t('admin.profileId')}</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="emptyCell">
+                    <td colSpan={11} className="emptyCell">
                       {t('admin.noLeads')}
                     </td>
                   </tr>
@@ -863,6 +985,30 @@ export default function AdminPage() {
                       <td>{lead.profile?.goal || '-'}</td>
                       <td className="wideCell">{lead.notes || '-'}</td>
                       <td className="idCell">{lead.profile_id || '-'}</td>
+                      <td>
+                        {lead.profile_id ? (
+                          <div className="leadActions">
+                            <a
+                              href={`/results?profileId=${lead.profile_id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="leadActionBtn tealBtn"
+                            >
+                              {t('admin.viewResults')}
+                            </a>
+                            <a
+                              href={`/results?profileId=${lead.profile_id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="leadActionBtn outlineBtn"
+                            >
+                              Open Draft
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="noProfile">No profile</span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1293,10 +1439,64 @@ const styles = `
     word-break: break-all;
   }
 
+  .leadActions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 150px;
+  }
+
+  .leadActionBtn {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .tealBtn {
+    background: #02c39a;
+    color: #0d1f3c;
+    border: none;
+  }
+
+  .tealBtn:hover { background: #01a884; }
+
+  .outlineBtn {
+    background: transparent;
+    color: rgba(255,255,255,0.8);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .outlineBtn:hover { background: rgba(255,255,255,0.07); }
+
+  .noProfile {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+  }
+
   .emptyCell {
     padding: 18px 14px !important;
     color: rgba(255,255,255,0.6) !important;
   }
+
+  .statusBadge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .statusBadge--open { background: rgba(2,195,154,0.15); color: #02c39a; }
+  .statusBadge--rolling { background: rgba(96,165,250,0.15); color: #60a5fa; }
+  .statusBadge--upcoming { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .statusBadge--closed { background: rgba(248,113,113,0.15); color: #f87171; }
+  .statusBadge--unknown { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4); }
 
   .scoreBadge {
     display: inline-block;
