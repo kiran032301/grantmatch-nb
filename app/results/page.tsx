@@ -298,6 +298,15 @@ function ResultsContent() {
   const [draftError, setDraftError] = useState<string | null>(null)
   const [selectedDraftGrant, setSelectedDraftGrant] = useState<ScoredGrant | null>(null)
   const [draftLanguage, setDraftLanguage] = useState<'en' | 'fr'>('en')
+  const [draftDetails, setDraftDetails] = useState({
+    founderName: '',
+    registrationNumber: '',
+    incorporationDate: '',
+    fundingAmount: '',
+    projectTimeline: '',
+    measurableOutcome: '',
+    founderBio: '',
+  })
   const [draftContent, setDraftContent] = useState<{
     title: string
     executive_summary: string
@@ -607,60 +616,226 @@ function ResultsContent() {
   async function handleDownloadDraftPdf() {
     if (!draftContent) return
 
-    const doc = new jsPDF()
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const margin = 14
-    const maxWidth = pageWidth - margin * 2
-    let y = 18
+    const marginL = 20
+    const marginR = 20
+    const marginTop = 24
+    const marginBottom = 20
+    const contentWidth = pageWidth - marginL - marginR
+    let y = marginTop
 
-    const addSection = (title: string, body: string) => {
-      if (y > pageHeight - 30) {
+    const isFr = draftLanguage === 'fr'
+    const TEAL: [number, number, number] = [2, 144, 130]
+    const DARK: [number, number, number] = [13, 31, 60]
+    const GRAY: [number, number, number] = [100, 110, 125]
+    const LIGHT_GRAY: [number, number, number] = [220, 225, 232]
+
+    const checkPage = (needed: number) => {
+      if (y + needed > pageHeight - marginBottom) {
         doc.addPage()
-        y = 18
+        y = marginTop
       }
-
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.text(title, margin, y)
-      y += 8
-
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(11)
-      const lines = doc.splitTextToSize(body || '', maxWidth)
-      doc.text(lines, margin, y)
-      y += lines.length * 6 + 8
     }
 
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(16)
-    doc.text(draftContent.title || 'Application Draft', margin, y)
-    y += 12
+    // ── Data variables ───────────────────────────────────────────
+    const companyName = (profile as any)?.business_name || 'Business'
+    const founderName = (draftDetails as any)?.founderName || ''
+    const regNum = (draftDetails as any)?.registrationNumber || ''
+    const grantName = selectedDraftGrant?.name || ''
 
-    addSection(
-      draftLanguage === 'fr' ? 'Résumé exécutif' : 'Executive Summary',
-      draftContent.executive_summary
-    )
-    addSection(
-      draftLanguage === 'fr' ? "Présentation de l'entreprise" : 'Business Overview',
-      draftContent.business_overview
-    )
-    addSection(
-      draftLanguage === 'fr' ? 'Alignement du projet' : 'Project Alignment',
-      draftContent.project_alignment
-    )
-    addSection(
-      draftLanguage === 'fr' ? 'Utilisation des fonds' : 'Use of Funds',
-      draftContent.use_of_funds
-    )
-    addSection(
-      draftLanguage === 'fr' ? 'Impact attendu' : 'Expected Impact',
-      draftContent.expected_impact
-    )
-    addSection(
-      draftLanguage === 'fr' ? 'Conclusion' : 'Closing Statement',
-      draftContent.closing_statement
-    )
+    const today = new Date().toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    })
+
+    // ── Header band ──────────────────────────────────────────────
+    doc.setFillColor(...DARK)
+    doc.rect(0, 0, pageWidth, 28, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.setTextColor(255, 255, 255)
+    doc.text(String(companyName), marginL, 12)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(180, 200, 220)
+    doc.text(isFr ? 'Brouillon de demande de financement' : 'Grant Application Draft', marginL, 19)
+    doc.text(today, pageWidth - marginR, 19, { align: 'right' })
+    y = 36
+
+    // ── Application info block ───────────────────────────────────
+    doc.setFillColor(240, 244, 248)
+    doc.roundedRect(marginL, y, contentWidth, 30, 2, 2, 'F')
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(marginL, y, contentWidth, 30, 2, 2, 'S')
+
+    const col1x = marginL + 6
+    const col2x = marginL + contentWidth / 2 + 4
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7.5)
+    doc.setTextColor(...GRAY)
+    const lbl = isFr
+      ? { co: 'ENTREPRISE', fn: 'FONDATEUR / DEMANDEUR', rn: "N° D'ENREGISTREMENT", gr: 'PROGRAMME DE FINANCEMENT' }
+      : { co: 'COMPANY', fn: 'FOUNDER / APPLICANT', rn: 'REGISTRATION NUMBER', gr: 'FUNDING PROGRAM' }
+
+    doc.text(lbl.co, col1x, y + 7)
+    doc.text(lbl.fn, col2x, y + 7)
+    doc.text(lbl.rn, col1x, y + 20)
+    doc.text(lbl.gr, col2x, y + 20)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...DARK)
+    doc.text(String(companyName), col1x, y + 14)
+    doc.text(founderName || '—', col2x, y + 14)
+    doc.text(regNum || '—', col1x, y + 27)
+    const grantNameLines = doc.splitTextToSize(String(grantName) || '—', contentWidth / 2 - 8)
+    doc.text(grantNameLines[0] || '—', col2x, y + 27)
+    y += 38
+
+    // ── Teal accent line ─────────────────────────────────────────
+    doc.setDrawColor(...TEAL)
+    doc.setLineWidth(1.2)
+    doc.line(marginL, y, pageWidth - marginR, y)
+    y += 6
+
+    // ── Document title ───────────────────────────────────────────
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.setTextColor(...DARK)
+    const titleLines = doc.splitTextToSize(draftContent.title || (isFr ? 'Demande de financement' : 'Funding Application'), contentWidth)
+    doc.text(titleLines, marginL, y)
+    y += titleLines.length * 7 + 8
+
+    // ── Section renderer ─────────────────────────────────────────
+    const addSection = (heading: string, body: string) => {
+      if (!body?.trim()) return
+      checkPage(20)
+      doc.setFillColor(...TEAL)
+      doc.rect(marginL, y, 3, 5.5, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(...TEAL)
+      doc.text(heading.toUpperCase(), marginL + 6, y + 4.5)
+      y += 10
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10.5)
+      doc.setTextColor(40, 50, 65)
+      const lines = doc.splitTextToSize(body, contentWidth)
+      lines.forEach((line: string) => {
+        checkPage(6)
+        doc.text(line, marginL, y)
+        y += 6
+      })
+      y += 4
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(0.25)
+      doc.line(marginL, y, pageWidth - marginR, y)
+      y += 6
+    }
+
+    const labels = isFr
+      ? { executive_summary: 'Résumé exécutif', business_overview: "Présentation de l'entreprise", project_alignment: 'Alignement du projet', use_of_funds: 'Utilisation des fonds', expected_impact: 'Impact attendu', closing_statement: 'Conclusion' }
+      : { executive_summary: 'Executive Summary', business_overview: 'Business Overview', project_alignment: 'Project Alignment', use_of_funds: 'Use of Funds', expected_impact: 'Expected Impact', closing_statement: 'Closing Statement' }
+
+    addSection(labels.executive_summary, draftContent.executive_summary)
+    addSection(labels.business_overview, draftContent.business_overview)
+    addSection(labels.project_alignment, draftContent.project_alignment)
+    addSection(labels.use_of_funds, draftContent.use_of_funds)
+    addSection(labels.expected_impact, draftContent.expected_impact)
+    addSection(labels.closing_statement, draftContent.closing_statement)
+
+    // ── Signature block ──────────────────────────────────────────
+    checkPage(70)
+    y += 6
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.setLineWidth(0.3)
+    doc.line(marginL, y, pageWidth - marginR, y)
+    y += 10
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...DARK)
+    doc.text(isFr ? 'Déclaration et signature' : 'Declaration & Signature', marginL, y)
+    y += 8
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(...GRAY)
+    const declText = isFr
+      ? "Je soussigné(e) déclare que les renseignements fournis dans cette demande sont véridiques et exacts à ma connaissance."
+      : "I, the undersigned, declare that the information provided in this application is true and accurate to the best of my knowledge."
+    const declLines = doc.splitTextToSize(declText, contentWidth)
+    doc.text(declLines, marginL, y)
+    y += declLines.length * 5.5 + 14
+
+    const sigColW = (contentWidth - 20) / 2
+    const col1sig = marginL
+    const col2sig = marginL + sigColW + 20
+
+    // Signature line
+    doc.setDrawColor(...DARK)
+    doc.setLineWidth(0.5)
+    doc.line(col1sig, y, col1sig + sigColW, y)
+    if (founderName) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(9)
+      doc.setTextColor(160, 170, 180)
+      doc.text(founderName, col1sig, y - 4)
+    }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...GRAY)
+    doc.text(isFr ? 'Signature du demandeur' : 'Applicant Signature', col1sig, y + 5)
+
+    // Date line
+    doc.setDrawColor(...DARK)
+    doc.setLineWidth(0.5)
+    doc.line(col2sig, y, col2sig + sigColW, y)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(9)
+    doc.setTextColor(160, 170, 180)
+    doc.text(today, col2sig, y - 4)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...GRAY)
+    doc.text('Date', col2sig, y + 5)
+    y += 20
+
+    // Company stamp box
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.setLineWidth(0.4)
+    doc.setLineDashPattern([2, 2], 0)
+    doc.rect(col1sig, y, sigColW, 22)
+    doc.setLineDashPattern([], 0)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...GRAY)
+    doc.text(isFr ? "Cachet de l'entreprise (si applicable)" : 'Company Stamp (if applicable)', col1sig + sigColW / 2, y + 12, { align: 'center' })
+
+    // Prepared by
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(7.5)
+    doc.text(`${isFr ? 'Préparé par' : 'Prepared by'} ${String(companyName)} · ${today}`, col2sig, y + 8)
+    y += 30
+
+    // ── Final footer on every page ───────────────────────────────
+    const totalPages = (doc as any).internal.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...GRAY)
+      const footerLine = isFr
+        ? `${String(companyName)} · Brouillon de demande · Page ${i} / ${totalPages}`
+        : `${String(companyName)} · Application Draft · Page ${i} / ${totalPages}`
+      doc.text(footerLine, pageWidth / 2, pageHeight - 10, { align: 'center' })
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(0.3)
+      doc.line(marginL, pageHeight - 14, pageWidth - marginR, pageHeight - 14)
+    }
 
     doc.save(`${getDraftFileBaseName()}.pdf`)
   }
